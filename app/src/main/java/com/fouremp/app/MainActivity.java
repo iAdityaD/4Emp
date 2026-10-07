@@ -22,11 +22,12 @@ public class MainActivity extends Activity {
     private LinearLayout root, body, nav;
     private int tab=0;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private TextView elapsed;
+    private TextView elapsed, remaining;
+    private ProgressRing ring;
+    private JSONObject displayedShift;
     private final Runnable ticker=new Runnable() {
         public void run() {
-            JSONObject active=store.active();
-            if(elapsed!=null && active!=null) elapsed.setText(duration(ScheduleMath.duration(active.optLong("in"),0,System.currentTimeMillis())));
+            updateTimer();
             handler.postDelayed(this,1000);
         }
     };
@@ -73,7 +74,7 @@ public class MainActivity extends Activity {
     private String duration(long millis) { long min=millis/60000; return String.format(Locale.getDefault(),"%02dh %02dm",min/60,min%60); }
     private void render() {
         if(root==null) return;
-        elapsed=null; root.removeAllViews();
+        elapsed=null; remaining=null; ring=null; displayedShift=null; root.removeAllViews();
         LinearLayout header=row(); header.setPadding(dp(24),dp(12),dp(24),dp(8));
         header.addView(text("4",30,LIME,true)); header.addView(text("Emp",30,TEXT,true));
         TextView badge=text(" YOUR WORKDAY, IN SYNC",10,MUTED,true); badge.setGravity(Gravity.RIGHT);
@@ -91,42 +92,70 @@ public class MainActivity extends Activity {
         root.addView(nav);
     }
     private void title(String title,String sub) { body.addView(text(title,28,TEXT,true)); body.addView(text(sub,14,MUTED,false)); space(body,20); }
+    private String hours(int minutes) { return minutes/60+"h"+(minutes%60==0?"":" "+minutes%60+"m"); }
+    private String targetStamp(long epoch,long start) { return stamp(epoch)+(date(epoch).equals(date(start))?"":" · "+date(epoch)); }
+    private void updateTimer() {
+        if(ring==null) return;
+        int minutes=displayedShift==null?store.workMinutes():store.shiftMinutes(displayedShift);
+        long spent=displayedShift==null?0:ScheduleMath.duration(displayedShift.optLong("in"),displayedShift.optLong("out"),System.currentTimeMillis());
+        elapsed.setText(duration(spent)); ring.progress(WorkMath.progress(spent,minutes));
+        long left=minutes*60000L-spent;
+        remaining.setText(displayedShift!=null && displayedShift.optLong("out")>0?"Shift finished":left<=0?"Work goal reached":duration(left)+" remaining");
+    }
+    private String guidance() {
+        int minutes=store.workMinutes();
+        if(minutes>WorkMath.windowMinutes(store.dayStart(),store.dayEnd())) return "Your work goal is longer than your day window. Adjust it in Settings.";
+        long[] window=WorkMath.window(System.currentTimeMillis(),ZoneId.systemDefault(),store.dayStart(),store.dayEnd());
+        long latest=window[1]-minutes*60000L;
+        return "Swipe in by "+targetStamp(latest,System.currentTimeMillis())+" to finish by "+stamp(window[1])+". You can swipe in at any time.";
+    }
     private void today() {
-        title("Make time for you.",LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMMM")));
-        JSONObject active=store.active();
-        LinearLayout hero=card(body); hero.addView(text(active==null?"READY WHEN YOU ARE":"●  ON THE CLOCK",12,LIME,true));
-        elapsed=text(active==null?"Let’s get started.":duration(ScheduleMath.duration(active.optLong("in"),0,System.currentTimeMillis())),active==null?27:40,TEXT,true);
-        hero.addView(elapsed);
-        hero.addView(text(active==null?"A focused day starts with one swipe.":"Swiped in "+date(active.optLong("in"))+" at "+stamp(active.optLong("in")),14,MUTED,false));
+        title("Your workday.",LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMMM")));
+        JSONObject active=store.active(); displayedShift=active;
+        if(displayedShift==null) {
+            JSONArray shifts=store.shifts();
+            if(shifts.length()>0) {
+                JSONObject last=shifts.optJSONObject(shifts.length()-1);
+                if(Instant.ofEpochMilli(last.optLong("out")).atZone(ZoneId.systemDefault()).toLocalDate().equals(LocalDate.now())) displayedShift=last;
+            }
+        }
+        LinearLayout hero=card(body);
+        TextView status=text(active!=null?"●  ON THE CLOCK":displayedShift!=null?"SHIFT COMPLETE":"READY WHEN YOU ARE",12,LIME,true);
+        status.setGravity(Gravity.CENTER); hero.addView(status);
+        FrameLayout timer=new FrameLayout(this); ring=new ProgressRing(this);
+        timer.addView(ring,new FrameLayout.LayoutParams(-1,-1));
+        LinearLayout center=column(); center.setGravity(Gravity.CENTER);
+        elapsed=text("00h 00m",32,TEXT,true); elapsed.setGravity(Gravity.CENTER); center.addView(elapsed);
+        int goal=displayedShift==null?store.workMinutes():store.shiftMinutes(displayedShift);
+        TextView goalLabel=text(hours(goal)+" work goal",14,CYAN,false); goalLabel.setGravity(Gravity.CENTER); center.addView(goalLabel);
+        remaining=text("",12,MUTED,false); remaining.setGravity(Gravity.CENTER); center.addView(remaining);
+        timer.addView(center,new FrameLayout.LayoutParams(-1,-1)); hero.addView(timer,new LinearLayout.LayoutParams(-1,dp(250)));
+        if(displayedShift!=null) {
+            long in=displayedShift.optLong("in"),out=displayedShift.optLong("out");
+            LinearLayout times=row();
+            LinearLayout start=column(),end=column();
+            start.addView(text("Swipe in",12,MUTED,false)); start.addView(text(stamp(in),22,TEXT,true));
+            end.addView(text(out>0?"Swipe out":"Expected out",12,MUTED,false));
+            end.addView(text(targetStamp(out>0?out:store.target(displayedShift),in),22,CYAN,true));
+            times.addView(start,new LinearLayout.LayoutParams(0,-2,1)); times.addView(end,new LinearLayout.LayoutParams(0,-2,1)); hero.addView(times);
+            if(active!=null) {
+                long[] window=WorkMath.window(in,ZoneId.systemDefault(),store.dayStart(),store.dayEnd());
+                if(store.target(active)>window[1]) hero.addView(text("Expected finish is after your day end of "+stamp(window[1])+".",12,MUTED,false));
+            }
+        } else {
+            TextView hint=text(guidance(),13,MUTED,false); hint.setGravity(Gravity.CENTER); hero.addView(hint);
+        }
         space(hero,16);
         fullButton(hero,active==null?"Swipe in  →":"Swipe out  →",true,()-> {
             if(store.active()!=null) new AlertDialog.Builder(this).setTitle("Finish this shift?").setMessage("Your swipe out time will be recorded now.")
                 .setNegativeButton("Keep working",null).setPositiveButton("Swipe out",(d,w)->recordSwipe()).show();
             else recordSwipe();
         });
-        LinearLayout planned=card(body); planned.addView(text("YOUR WORK HOURS",11,MUTED,true));
-        LinearLayout times=row();
-        List<Store.Reminder> reminders=store.reminders();
-        for(int id=1;id<=2;id++) for(Store.Reminder r:reminders) if(r.id==id) {
-            LinearLayout half=column(); half.addView(text(r.title,13,MUTED,false)); half.addView(text(time(r.time),28,id==1?LIME:CYAN,true));
-            half.setContentDescription("Edit "+r.title+" reminder time"); half.setOnClickListener(v->editReminder(r)); times.addView(half,new LinearLayout.LayoutParams(0,-2,1));
-        }
-        planned.addView(times); planned.addView(text("Tap a time to customize your reminder",12,MUTED,false));
-        body.addView(text("Coming up",19,TEXT,true)); space(body,10);
-        List<Store.Reminder> upcoming=new ArrayList<>();
-        for(Store.Reminder r:reminders) if(r.enabled && store.prefs.getBoolean("notifications",true)) upcoming.add(r);
-        upcoming.sort(Comparator.comparingLong(r->ScheduleMath.next(System.currentTimeMillis(),ZoneId.systemDefault(),r.time,r.days)));
-        if(upcoming.isEmpty()) body.addView(text("No reminders enabled. Add one in Schedule.",14,MUTED,false));
-        for(int i=0;i<Math.min(3,upcoming.size());i++) {
-            Store.Reminder r=upcoming.get(i); long next=ScheduleMath.next(System.currentTimeMillis(),ZoneId.systemDefault(),r.time,r.days);
-            LinearLayout c=card(body); c.addView(text(r.title,17,TEXT,true)); c.addView(text(date(next)+" · "+time(r.time),14,CYAN,false)); c.setOnClickListener(v->editReminder(r));
-        }
-        if(!getSystemService(NotificationManager.class).areNotificationsEnabled()) {
-            fullButton(body,"Enable notifications",false,this::permission);
-        }
+        updateTimer();
+        if(!getSystemService(NotificationManager.class).areNotificationsEnabled()) fullButton(body,"Enable notifications",false,this::permission);
     }
     private void recordSwipe() {
-        boolean closing=store.active()!=null; store.swipe();
+        boolean closing=store.active()!=null; store.swipe(); ReminderScheduler.all(this);
         ReminderScheduler.notify(this,900,closing?"Swiped out":"Swiped in",(closing?"Shift completed":"Shift started")+" at "+stamp(System.currentTimeMillis())); render();
     }
     private String days(int bits) {
@@ -138,7 +167,8 @@ public class MainActivity extends Activity {
         title("Your daily rhythm.","Work, breaks and a little breathing room.");
         for(Store.Reminder r:store.reminders()) {
             LinearLayout c=card(body), line=row(); LinearLayout details=column();
-            details.addView(text(r.title,18,TEXT,true)); details.addView(text(time(r.time)+"  ·  "+days(r.days),13,CYAN,false));
+            details.addView(text(r.title,18,TEXT,true)); String timing=r.id==2?"Actual swipe in + work goal":r.id==1?"By "+time(WorkMath.latestMinute(store.dayEnd(),store.workMinutes()))+" · "+days(r.days):time(r.time)+"  ·  "+days(r.days);
+            details.addView(text(timing,13,CYAN,false));
             line.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             Switch toggle=new Switch(this); toggle.setContentDescription("Enable "+r.title); toggle.setChecked(r.enabled);
             toggle.setOnCheckedChangeListener((b,checked)-> {
@@ -165,13 +195,16 @@ public class MainActivity extends Activity {
         final int[] chosen={r.time,r.days};
         Button timeButton=button("Time: "+time(chosen[0]),false,()->{});
         timeButton.setOnClickListener(v->pickTime(chosen[0],m->{chosen[0]=m; timeButton.setText("Time: "+time(m));}));
-        space(form,12); form.addView(timeButton); space(form,12);
+        space(form,12);
+        if(r.id<=2) form.addView(text(r.id==1?"Swipe-in time is calculated from day end minus your work goal. Change these in Settings.":"Notifies when your actual swipe-in time plus your work goal is reached, on any day you work.",14,CYAN,false));
+        else form.addView(timeButton);
+        space(form,12);
         Button dayButton=button(days(chosen[1]),false,()->{});
         dayButton.setOnClickListener(v-> {
             boolean[] checked=new boolean[7]; for(int i=0;i<7;i++) checked[i]=(chosen[1]&(1<<i))!=0;
             new AlertDialog.Builder(this).setTitle("Repeat on").setMultiChoiceItems(new String[]{"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"},checked,(d,w,c)->checked[w]=c)
                 .setPositiveButton("Done",(d,w)-> { int mask=0; for(int i=0;i<7;i++) if(checked[i]) mask|=1<<i; chosen[1]=mask; dayButton.setText(mask==0?"Select at least one day":days(mask)); }).setNegativeButton("Cancel",null).show();
-        }); form.addView(dayButton);
+        }); if(r.id!=2) form.addView(dayButton);
         Switch enabled=new Switch(this); enabled.setText("Reminder enabled"); enabled.setChecked(r.enabled); form.addView(enabled);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(editing?"Edit reminder":"New reminder").setView(form)
             .setPositiveButton("Save",null).setNegativeButton("Cancel",null)
@@ -198,7 +231,7 @@ public class MainActivity extends Activity {
             final int index=i; JSONObject shift=shifts.optJSONObject(i); long in=shift.optLong("in"), out=shift.optLong("out");
             LinearLayout c=card(body); c.addView(text(date(in),18,TEXT,true));
             c.addView(text(stamp(in)+"  →  "+(out==0?"In progress":stamp(out)+(date(in).equals(date(out))?"":" ("+date(out)+")")),15,CYAN,false));
-            c.addView(text(duration(ScheduleMath.duration(in,out,System.currentTimeMillis()))+" elapsed",15,LIME,true));
+            c.addView(text(duration(ScheduleMath.duration(in,out,System.currentTimeMillis()))+" elapsed · "+hours(store.shiftMinutes(shift))+" goal",15,LIME,true));
             space(c,8); fullButton(c,"Correct swipe times",false,()->editShift(index,in,out));
         }
     }
@@ -219,7 +252,7 @@ public class MainActivity extends Activity {
                 JSONObject other=all.optJSONObject(i); long otherEnd=other.optLong("out")==0?Long.MAX_VALUE:other.optLong("out");
                 if(selected[0]<otherEnd && other.optLong("in")<end) { Toast.makeText(this,"This would overlap another shift",Toast.LENGTH_LONG).show(); return; }
             }
-            try { store.editShift(index,selected[0],selected[1]); d.dismiss(); render(); }
+            try { store.editShift(index,selected[0],selected[1]); ReminderScheduler.all(this); d.dismiss(); render(); }
             catch(IllegalArgumentException e) { Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show(); }
         })); d.show();
     }
@@ -234,6 +267,14 @@ public class MainActivity extends Activity {
     }
     private void settings() {
         title("Make it yours.","Small reminders. Set up your way.");
+        LinearLayout work=card(body); work.addView(text("WORKDAY",11,LIME,true));
+        fullButton(work,"Work hours: "+hours(store.workMinutes()),false,this::chooseWorkHours);
+        work.addView(text("Applies to your next swipe in. Active shifts keep their chosen work goal.",12,MUTED,false));
+        space(work,12);
+        fullButton(work,"Start of day: "+time(store.dayStart()),false,()->pickTime(store.dayStart(),m->{ store.prefs.edit().putInt("dayStart",m).apply(); ReminderScheduler.all(this); render(); }));
+        space(work,10);
+        fullButton(work,"End of day: "+time(store.dayEnd()),false,()->pickTime(store.dayEnd(),m->{ store.prefs.edit().putInt("dayEnd",m).apply(); ReminderScheduler.all(this); render(); }));
+        work.addView(text(guidance(),13,CYAN,false));
         LinearLayout c=card(body); c.addView(text("NOTIFICATIONS",11,LIME,true));
         preference(c,"All reminders","notifications",true); preference(c,"Play sound","sound",true); preference(c,"Vibrate","vibration",true);
         c.addView(text("Sound and vibration also follow your phone’s notification and Do Not Disturb settings.",12,MUTED,false));
@@ -247,7 +288,21 @@ public class MainActivity extends Activity {
         precision.addView(text(ReminderScheduler.precise(this)?"Precise reminders enabled":"Flexible reminders enabled",18,TEXT,true));
         precision.addView(text("Allow precise reminders for your chosen times. Otherwise Android may delay alerts to save battery. Force-stopping the app pauses reminders until you open it again.",13,MUTED,false));
         if(Build.VERSION.SDK_INT>=31 && !ReminderScheduler.precise(this)) { space(precision,12); fullButton(precision,"Allow precise reminders",false,()->startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())))); }
-        LinearLayout privacy=card(body); privacy.addView(text("Made for your workday.",18,TEXT,true)); privacy.addView(text("4Emp 1.0 · Android\nAttendance stays on this device. No account needed. Swipe actions are manual records; connect with your employer separately to submit attendance or timesheets. Elapsed time includes breaks.",13,MUTED,false));
+        LinearLayout privacy=card(body); privacy.addView(text("Made for your workday.",18,TEXT,true)); privacy.addView(text("4Emp 1.1 · Android\nAttendance stays on this device. No account needed. Swipe actions are manual records; connect with your employer separately to submit attendance or timesheets. Elapsed time includes breaks.",13,MUTED,false));
+    }
+    private void chooseWorkHours() {
+        new AlertDialog.Builder(this).setTitle("Work hours")
+            .setItems(new String[]{"9 hours","6 hours","Custom duration"},(d,which)-> {
+                if(which<2) { saveWorkMinutes(which==0?540:360); return; }
+                TimePickerDialog picker=new TimePickerDialog(this,(v,h,m)-> {
+                    int minutes=h*60+m;
+                    if(minutes==0) Toast.makeText(this,"Choose at least one minute",Toast.LENGTH_SHORT).show(); else saveWorkMinutes(minutes);
+                },store.workMinutes()/60,store.workMinutes()%60,true);
+                picker.setTitle("Work duration (hours : minutes)"); picker.show();
+            }).setNegativeButton("Cancel",null).show();
+    }
+    private void saveWorkMinutes(int minutes) {
+        store.prefs.edit().putInt("workMinutes",minutes).apply(); ReminderScheduler.all(this); render();
     }
     private void permission() {
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},42);

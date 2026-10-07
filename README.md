@@ -7,7 +7,11 @@ A focused native Android companion for your workday. Dark navy surfaces, lime an
 - Record swipe in and swipe out with a live elapsed-time display and confirmation before ending a shift.
 - Keep attendance locally, including overnight shifts and multiple shifts in a day.
 - Correct recorded swipe dates and times; validation prevents future times, reversed times, and overlapping shifts.
-- Customize swipe in, swipe out, and timesheet reminders.
+- Choose a 9-hour, 6-hour, or custom work goal. Expected swipe out = actual swipe in + work goal (09:04 + 9 hours = 18:04).
+- Minimal Today screen with a live circular progress ring, elapsed hours, work goal, and swipe times. The ring fills clockwise and stays full after the goal; elapsed time keeps counting.
+- Configure day start/end in Settings. Swipe-in guidance uses day end minus work goal; swiping remains allowed at any time.
+- Swipe-out notifications follow the active shift's calculated target on any day you work. Completed shifts cancel their pending reminder. New work-hour settings apply to the next shift, preserving an active shift's goal.
+- Customize swipe and timesheet notification messages.
 - Add, edit, enable, disable, or delete lunch, tea, and other custom reminders.
 - Choose notification messages, times, repeat weekdays, sound, and vibration.
 - Restore schedules after reboot, app update, clock changes, and timezone changes.
@@ -32,7 +36,7 @@ GitHub Actions builds and lints each main-branch push and pull request. Download
 
 1. Open **Today** and enable notifications. On Android 13+, approve notification access.
 2. Record your actual attendance with **Swipe in** and **Swipe out**. Recording a swipe also sends a confirmation notification when notifications are enabled.
-3. Tap a work time or open **Schedule** to customize reminder times, messages, and repeat days. Defaults are Monday–Friday: 09:00 swipe in, 13:00 lunch, 16:00 tea, 17:30 timesheet, 18:00 swipe out.
+3. Open **Settings** to choose work hours and the start/end of your day (defaults: 9 hours, 09:00–18:00). Open **Schedule** for notification messages and recurring breaks. Swipe-in reminders use the latest calculated start on selected weekdays; swipe-out reminders use the active shift's target regardless of weekday. Default recurring breaks/timesheet: Monday–Friday, 13:00 lunch, 16:00 tea, 17:30 timesheet.
 4. Use **History → Correct swipe times** to correct a recorded shift.
 5. In **Settings**, adjust sound/vibration, send a test notification, or allow precise reminders.
 
@@ -46,6 +50,6 @@ Android may delay flexible reminders. Precise reminder access is optional. Phone
 bash tests/run.sh
 ```
 
-The Java checks cover weekday recurrence, weekend skipping, exact-time boundaries, midnight, timezone changes, DST transitions, invalid schedules, and overnight duration. CI additionally compiles the app and runs Android lint.
+The Java checks cover weekday recurrence, weekend skipping, exact-time boundaries, midnight, timezone changes, DST transitions, invalid schedules, overnight duration, actual swipe-based finish times, 6/9-hour goals, overnight day windows, and clamped ring progress. CI additionally compiles the app and runs Android lint.
 
 Before distributing a release, verify on a physical device: notification permission denial/grant, precise alarm access changes, reboot restoration, sound/vibration settings, screen lock/Doze delivery, manual time edits, process restart persistence, and UI readability with large text.

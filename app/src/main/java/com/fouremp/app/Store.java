@@ -51,11 +51,16 @@ final class Store {
         JSONObject last=a.optJSONObject(a.length()-1);
         return last.optLong("out")==0 ? last : null;
     }
+    int workMinutes() { return prefs.getInt("workMinutes",540); }
+    int dayStart() { return prefs.getInt("dayStart",540); }
+    int dayEnd() { return prefs.getInt("dayEnd",1080); }
+    int shiftMinutes(JSONObject shift) { return shift.optInt("workMinutes",540); }
+    long target(JSONObject shift) { return WorkMath.target(shift.optLong("in"),shiftMinutes(shift)); }
     void swipe() {
         JSONArray a=shifts(); long now=System.currentTimeMillis();
         try {
             if(active()!=null) a.getJSONObject(a.length()-1).put("out",now);
-            else a.put(new JSONObject().put("in",now).put("out",0));
+            else a.put(new JSONObject().put("in",now).put("out",0).put("workMinutes",workMinutes()));
         } catch(JSONException e) { throw new IllegalStateException(e); }
         prefs.edit().putString("shifts",a.toString()).apply();
     }

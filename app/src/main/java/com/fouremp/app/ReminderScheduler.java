@@ -11,15 +11,42 @@ final class ReminderScheduler {
     }
     static void cancel(Context c,int id) { c.getSystemService(AlarmManager.class).cancel(intent(c,id)); }
     static boolean precise(Context c) { return Build.VERSION.SDK_INT<31 || c.getSystemService(AlarmManager.class).canScheduleExactAlarms(); }
+    private static PendingIntent completionIntent(Context c,long target) {
+        return PendingIntent.getBroadcast(c,2,new Intent(c,ReminderReceiver.class).putExtra("id",2).putExtra("target",target),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+    }
     static void schedule(Context c, Store.Reminder r) {
         cancel(c,r.id);
         if(!r.enabled || !new Store(c).prefs.getBoolean("notifications",true)) return;
-        long next=ScheduleMath.next(System.currentTimeMillis(),ZoneId.systemDefault(),r.time,r.days);
+        Store store=new Store(c);
+        long next;
+        PendingIntent operation;
+        if(r.id==2) {
+            org.json.JSONObject active=store.active();
+            if(active==null) return;
+            next=store.target(active);
+            if(store.prefs.getLong("completionDelivered",0)==next) return;
+            if(next<=System.currentTimeMillis()) { complete(c,next); return; }
+            operation=completionIntent(c,next);
+        } else {
+            if(r.id==1 && store.workMinutes()>WorkMath.windowMinutes(store.dayStart(),store.dayEnd())) return;
+            int minute=r.id==1?WorkMath.latestMinute(store.dayEnd(),store.workMinutes()):r.time;
+            next=ScheduleMath.next(System.currentTimeMillis(),ZoneId.systemDefault(),minute,r.days);
+            operation=intent(c,r.id);
+        }
         AlarmManager manager=c.getSystemService(AlarmManager.class);
         try {
-            if(precise(c)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,next,intent(c,r.id));
-            else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,next,intent(c,r.id));
-        } catch(SecurityException denied) { manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,next,intent(c,r.id)); }
+            if(precise(c)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,next,operation);
+            else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,next,operation);
+        } catch(SecurityException denied) { manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,next,operation); }
+    }
+    static void complete(Context c,long expected) {
+        Store store=new Store(c); org.json.JSONObject active=store.active();
+        if(active==null || store.target(active)!=expected || expected>System.currentTimeMillis() || store.prefs.getLong("completionDelivered",0)==expected) return;
+        if(!store.prefs.getBoolean("notifications",true) || !c.getSystemService(NotificationManager.class).areNotificationsEnabled()) return;
+        for(Store.Reminder r:store.reminders()) if(r.id==2 && r.enabled) {
+            notify(c,2,r.title,r.message+" Your work goal is complete. Expected swipe out: "+java.time.Instant.ofEpochMilli(expected).atZone(ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))+".");
+            store.prefs.edit().putLong("completionDelivered",expected).apply(); break;
+        }
     }
     static void all(Context c) { for(Store.Reminder r:new Store(c).reminders()) schedule(c,r); }
     static String channel(Context c) {
