@@ -21,19 +21,28 @@ public class MainActivity extends Activity {
     private Store store;
     private LinearLayout root, body, nav;
     private int tab=0;
+    private YearMonth calendarMonth=YearMonth.now();
+    private Set<LocalDate> calendarWorked=new HashSet<>();
+    private JSONObject calendarMarks=new JSONObject();
+    private LocalDate selectedDay=LocalDate.now(), renderedDay=LocalDate.now();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private TextView elapsed, remaining;
     private ProgressRing ring;
     private JSONObject displayedShift;
     private final Runnable ticker=new Runnable() {
         public void run() {
+            if(!renderedDay.equals(LocalDate.now())) { ReminderScheduler.all(MainActivity.this); render(); }
             updateTimer();
             handler.postDelayed(this,1000);
         }
     };
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); store=new Store(this);
-        if(state!=null) tab=state.getInt("tab",0);
+        if(state!=null) {
+            tab=state.getInt("tab",0);
+            calendarMonth=YearMonth.parse(state.getString("calendarMonth",YearMonth.now().toString()));
+            selectedDay=LocalDate.parse(state.getString("selectedDay",LocalDate.now().toString()));
+        }
         root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BG);
         root.setOnApplyWindowInsetsListener((v,insets)-> {
             if(Build.VERSION.SDK_INT>=30) {
@@ -48,7 +57,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onResume() { super.onResume(); ReminderScheduler.all(this); render(); handler.post(ticker); }
     @Override protected void onPause() { handler.removeCallbacks(ticker); super.onPause(); }
-    @Override protected void onSaveInstanceState(Bundle state) { state.putInt("tab",tab); super.onSaveInstanceState(state); }
+    @Override protected void onSaveInstanceState(Bundle state) { state.putInt("tab",tab); state.putString("calendarMonth",calendarMonth.toString()); state.putString("selectedDay",selectedDay.toString()); super.onSaveInstanceState(state); }
     private int dp(int n) { return Math.round(n*getResources().getDisplayMetrics().density); }
     private GradientDrawable shape(int color,int radius) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); return d; }
     private TextView text(String value,int size,int color,boolean bold) {
@@ -74,7 +83,7 @@ public class MainActivity extends Activity {
     private String duration(long millis) { long min=millis/60000; return String.format(Locale.getDefault(),"%02dh %02dm",min/60,min%60); }
     private void render() {
         if(root==null) return;
-        elapsed=null; remaining=null; ring=null; displayedShift=null; root.removeAllViews();
+        elapsed=null; remaining=null; ring=null; displayedShift=null; renderedDay=LocalDate.now(); root.removeAllViews();
         LinearLayout header=row(); header.setPadding(dp(24),dp(12),dp(24),dp(8));
         header.addView(text("4",30,LIME,true)); header.addView(text("Emp",30,TEXT,true));
         TextView badge=text(" YOUR WORKDAY, IN SYNC",10,MUTED,true); badge.setGravity(Gravity.RIGHT);
@@ -82,9 +91,9 @@ public class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);
         body=column(); body.setPadding(dp(24),dp(12),dp(24),dp(24)); scroll.addView(body);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        switch(tab) { case 1: schedule(); break; case 2: history(); break; case 3: settings(); break; default: today(); }
+        switch(tab) { case 1: schedule(); break; case 2: calendar(); break; case 3: settings(); break; default: today(); }
         nav=row(); nav.setPadding(dp(10),dp(10),dp(10),dp(10)); nav.setBackgroundColor(CARD);
-        String[] labels={"Today","Schedule","History","Settings"};
+        String[] labels={"Today","Schedule","Calendar","Settings"};
         for(int i=0;i<labels.length;i++) {
             final int index=i; TextView item=text(labels[i],13,tab==i?LIME:MUTED,tab==i); item.setGravity(Gravity.CENTER); item.setMinHeight(dp(48));
             item.setOnClickListener(v->{ tab=index; render(); }); nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));
@@ -111,6 +120,11 @@ public class MainActivity extends Activity {
     }
     private void today() {
         title("Your workday.",LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, dd MMMM")));
+        if(store.silent(LocalDate.now())) {
+            LinearLayout leave=card(body); leave.addView(text(store.dayMark(LocalDate.now()).equals("leave")?"On leave today":"Holiday today",26,CYAN,true));
+            leave.addView(text("All notifications are paused for today.",14,MUTED,false)); space(leave,16);
+            fullButton(leave,"Resume work today",true,()->setDay(LocalDate.now(),"")); return;
+        }
         JSONObject active=store.active(); displayedShift=active;
         if(displayedShift==null) {
             JSONArray shifts=store.shifts();
@@ -152,6 +166,8 @@ public class MainActivity extends Activity {
             else recordSwipe();
         });
         updateTimer();
+        TextView leaveAction=text("On leave today",14,MUTED,false); leaveAction.setGravity(Gravity.CENTER); leaveAction.setMinHeight(dp(48));
+        leaveAction.setOnClickListener(v->markDay(LocalDate.now(),"leave")); body.addView(leaveAction);
         if(!getSystemService(NotificationManager.class).areNotificationsEnabled()) fullButton(body,"Enable notifications",false,this::permission);
     }
     private void recordSwipe() {
@@ -164,18 +180,21 @@ public class MainActivity extends Activity {
         for(int i=0;i<7;i++) if((bits&(1<<i))!=0) selected.add(names[i]); return String.join(" · ",selected);
     }
     private void schedule() {
-        title("Your daily rhythm.","Work, breaks and a little breathing room.");
+        title("Schedule.","Your hours. Your reminders.");
+        LinearLayout goal=card(body), goalRow=row(); LinearLayout goalText=column();
+        goalText.addView(text("Work duration",12,MUTED,false)); goalText.addView(text(hours(store.workMinutes()),23,LIME,true));
+        goalRow.addView(goalText,new LinearLayout.LayoutParams(0,-2,1)); goalRow.addView(editIcon("Edit work duration",this::chooseWorkHours)); goal.addView(goalRow);
+        goal.addView(text(time(store.dayStart())+" – "+time(store.dayEnd())+" day window",13,MUTED,false));
         for(Store.Reminder r:store.reminders()) {
             LinearLayout c=card(body), line=row(); LinearLayout details=column();
-            details.addView(text(r.title,18,TEXT,true)); String timing=r.id==2?"Actual swipe in + work goal":r.id==1?"By "+time(WorkMath.latestMinute(store.dayEnd(),store.workMinutes()))+" · "+days(r.days):time(r.time)+"  ·  "+days(r.days);
+            details.addView(text(r.title,18,TEXT,true)); String timing=r.id==2?(store.active()==null?"Swipe in + "+hours(store.workMinutes()):"Expected "+stamp(store.target(store.active()))+" · "+hours(store.shiftMinutes(store.active()))):r.id==1?(store.workMinutes()>WorkMath.windowMinutes(store.dayStart(),store.dayEnd())?"Adjust day window in Settings":"By "+time(WorkMath.latestMinute(store.dayEnd(),store.workMinutes()))+" · "+days(r.days)):time(r.time)+"  ·  "+days(r.days);
             details.addView(text(timing,13,CYAN,false));
             line.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             Switch toggle=new Switch(this); toggle.setContentDescription("Enable "+r.title); toggle.setChecked(r.enabled);
             toggle.setOnCheckedChangeListener((b,checked)-> {
                 List<Store.Reminder> all=store.reminders(); for(Store.Reminder item:all) if(item.id==r.id) item.enabled=checked;
                 store.saveReminders(all); ReminderScheduler.all(this);
-            }); line.addView(toggle); c.addView(line);
-            c.addView(text(r.message,13,MUTED,false)); space(c,10); fullButton(c,"Edit reminder",false,()->editReminder(r));
+            }); line.addView(toggle); line.addView(editIcon("Edit "+r.title,()->editReminder(r))); c.addView(line);
         }
         fullButton(body,"+  Add a break or reminder",true,()->editReminder(new Store.Reminder(store.newId(),"","",840,31,true)));
     }
@@ -223,17 +242,85 @@ public class MainActivity extends Activity {
             });
         }); dialog.show();
     }
-    private void history() {
-        title("Every hour counts.","Your swipe history, saved on this device.");
-        JSONArray shifts=store.shifts();
-        if(shifts.length()==0) { LinearLayout c=card(body); c.addView(text("A fresh start",21,TEXT,true)); c.addView(text("Swipe in on Today to start your first shift.",15,MUTED,false)); return; }
-        for(int i=shifts.length()-1;i>=0;i--) {
-            final int index=i; JSONObject shift=shifts.optJSONObject(i); long in=shift.optLong("in"), out=shift.optLong("out");
-            LinearLayout c=card(body); c.addView(text(date(in),18,TEXT,true));
-            c.addView(text(stamp(in)+"  →  "+(out==0?"In progress":stamp(out)+(date(in).equals(date(out))?"":" ("+date(out)+")")),15,CYAN,false));
-            c.addView(text(duration(ScheduleMath.duration(in,out,System.currentTimeMillis()))+" elapsed · "+hours(store.shiftMinutes(shift))+" goal",15,LIME,true));
-            space(c,8); fullButton(c,"Correct swipe times",false,()->editShift(index,in,out));
+    private ImageButton editIcon(String description,Runnable action) {
+        ImageButton icon=new ImageButton(this); icon.setImageResource(R.drawable.ic_edit); icon.setContentDescription(description);
+        icon.setBackground(shape(0xFF233140,12)); icon.setPadding(dp(12),dp(12),dp(12),dp(12));
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(48),dp(48)); p.leftMargin=dp(10); icon.setLayoutParams(p);
+        icon.setOnClickListener(v->action.run()); return icon;
+    }
+    private int dayColor(LocalDate day) {
+        String mark=calendarMarks.optString(day.toString());
+        if(mark.equals("leave")) return 0xFFF9A8D4;
+        if(mark.equals("holiday")) return CYAN;
+        if(calendarWorked.contains(day)) return LIME;
+        return store.weekend(day)?0xFFC4B5FD:MUTED;
+    }
+    private String dayStatus(LocalDate day) {
+        List<String> labels=new ArrayList<>(); String mark=calendarMarks.optString(day.toString());
+        if(calendarWorked.contains(day)) labels.add("Worked");
+        if(mark.equals("leave")) labels.add("Leave");
+        if(mark.equals("holiday")) labels.add("Holiday");
+        if(store.weekend(day)) labels.add("Weekend");
+        return labels.isEmpty()?"No record":String.join(" · ",labels);
+    }
+    private void calendar() {
+        calendarWorked=store.workedDates(calendarMonth); calendarMarks=store.calendarDays();
+        title("Calendar.","Your workdays at a glance.");
+        LinearLayout c=card(body), heading=row();
+        Button previous=button("‹",false,()->{calendarMonth=calendarMonth.minusMonths(1); selectedDay=calendarMonth.atDay(1); render();});
+        previous.setContentDescription("Previous month"); heading.addView(previous,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        TextView month=text(calendarMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),19,TEXT,true); month.setGravity(Gravity.CENTER); heading.addView(month,new LinearLayout.LayoutParams(0,-2,1));
+        Button next=button("›",false,()->{calendarMonth=calendarMonth.plusMonths(1); selectedDay=calendarMonth.atDay(1); render();}); next.setContentDescription("Next month"); heading.addView(next,new LinearLayout.LayoutParams(dp(48),dp(48))); c.addView(heading); space(c,12);
+        LinearLayout weekdays=row(); for(String name:new String[]{"M","T","W","T","F","S","S"}) { TextView t=text(name,12,MUTED,true); t.setGravity(Gravity.CENTER); weekdays.addView(t,new LinearLayout.LayoutParams(0,dp(32),1)); } c.addView(weekdays);
+        int offset=calendarMonth.atDay(1).getDayOfWeek().getValue()-1;
+        int cells=((offset+calendarMonth.lengthOfMonth()+6)/7)*7;
+        for(int i=0;i<cells;i+=7) {
+            LinearLayout week=row();
+            for(int j=0;j<7;j++) {
+                int day=i+j-offset+1; TextView cell=text("",14,MUTED,false); cell.setGravity(Gravity.CENTER); cell.setMinHeight(dp(48));
+                if(day>0 && day<=calendarMonth.lengthOfMonth()) {
+                    LocalDate date=calendarMonth.atDay(day); cell.setText(Integer.toString(day)); cell.setTextColor(dayColor(date));
+                    if(date.equals(selectedDay)) cell.setBackground(shape(0xFF304152,12));
+                    if(date.equals(LocalDate.now())) cell.setTypeface(Typeface.DEFAULT_BOLD);
+                    cell.setContentDescription(date+", "+dayStatus(date)); cell.setOnClickListener(v->{selectedDay=date; render();});
+                }
+                week.addView(cell,new LinearLayout.LayoutParams(0,dp(48),1));
+            } c.addView(week);
         }
+        LinearLayout legend=row(); String[] labels={"Worked","Leave","Holiday","Weekend"}; int[] colors={LIME,0xFFF9A8D4,CYAN,0xFFC4B5FD};
+        for(int i=0;i<labels.length;i++) { TextView label=text("● "+labels[i],11,colors[i],false); label.setGravity(Gravity.CENTER); legend.addView(label,new LinearLayout.LayoutParams(0,-2,1)); } c.addView(legend);
+        LinearLayout detail=card(body), detailRow=row(); LinearLayout label=column();
+        label.addView(text(selectedDay.format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy")),18,TEXT,true)); label.addView(text(dayStatus(selectedDay),13,dayColor(selectedDay),false));
+        detailRow.addView(label,new LinearLayout.LayoutParams(0,-2,1)); detailRow.addView(editIcon("Set status for "+selectedDay,this::chooseDayStatus)); detail.addView(detailRow);
+        JSONArray shifts=store.shifts();
+        for(int i=0;i<shifts.length();i++) {
+            JSONObject shift=shifts.optJSONObject(i); long in=shift.optLong("in"),out=shift.optLong("out");
+            if(!DayMath.worked(selectedDay,in,out,System.currentTimeMillis(),ZoneId.systemDefault())) continue;
+            final int index=i; LinearLayout shiftRow=row();
+            TextView times=text(date(in)+" · "+stamp(in)+" → "+(out>0?targetStamp(out,in):"Working")+"\n"+duration(ScheduleMath.duration(in,out,System.currentTimeMillis()))+" / "+hours(store.shiftMinutes(shift)),13,MUTED,false);
+            shiftRow.addView(times,new LinearLayout.LayoutParams(0,-2,1)); shiftRow.addView(editIcon("Correct swipe times",()->editShift(index,in,out))); detail.addView(shiftRow);
+        }
+    }
+    private void chooseDayStatus() {
+        new AlertDialog.Builder(this).setTitle(selectedDay.toString())
+            .setItems(new String[]{"Mark worked","Mark leave","Mark holiday","Clear manual status"},(d,which)-> {
+                if(which==0 && selectedDay.isAfter(LocalDate.now())) { Toast.makeText(this,"Worked dates must be today or earlier",Toast.LENGTH_SHORT).show(); return; }
+                markDay(selectedDay,new String[]{"worked","leave","holiday",""}[which]);
+            }).setNegativeButton("Cancel",null).show();
+    }
+    private void markDay(LocalDate day,String mark) {
+        boolean silent=mark.equals("leave") || mark.equals("holiday");
+        String message=silent?"All notifications for this date will be paused.":"Update this date’s status? Recorded swipes will be kept.";
+        boolean close=silent && day.equals(LocalDate.now()) && store.active()!=null;
+        if(close) message="This will record swipe out now, keep your worked time, and pause all notifications for today.";
+        final boolean closeShift=close;
+        new AlertDialog.Builder(this).setTitle(silent?(mark.equals("leave")?"Mark leave?":"Mark holiday?"):"Update date?").setMessage(message)
+            .setNegativeButton("Cancel",null).setPositiveButton(close?"Swipe out and mark":"Confirm",(d,w)->{if(closeShift) store.swipe(); setDay(day,mark);}).show();
+    }
+    private void setDay(LocalDate day,String mark) {
+        store.markDay(day,mark);
+        if(day.equals(LocalDate.now()) && store.silent(day)) getSystemService(NotificationManager.class).cancelAll();
+        ReminderScheduler.all(this); render();
     }
     private void editShift(int index,long in,long out) {
         LinearLayout form=column(); form.setPadding(dp(24),dp(8),dp(24),dp(12));
@@ -269,17 +356,20 @@ public class MainActivity extends Activity {
         title("Make it yours.","Small reminders. Set up your way.");
         LinearLayout work=card(body); work.addView(text("WORKDAY",11,LIME,true));
         fullButton(work,"Work hours: "+hours(store.workMinutes()),false,this::chooseWorkHours);
-        work.addView(text("Applies to your next swipe in. Active shifts keep their chosen work goal.",12,MUTED,false));
+        work.addView(text("Set any duration. You can also apply changes to an active shift.",12,MUTED,false));
         space(work,12);
         fullButton(work,"Start of day: "+time(store.dayStart()),false,()->pickTime(store.dayStart(),m->{ store.prefs.edit().putInt("dayStart",m).apply(); ReminderScheduler.all(this); render(); }));
         space(work,10);
         fullButton(work,"End of day: "+time(store.dayEnd()),false,()->pickTime(store.dayEnd(),m->{ store.prefs.edit().putInt("dayEnd",m).apply(); ReminderScheduler.all(this); render(); }));
         work.addView(text(guidance(),13,CYAN,false));
+        space(work,10); fullButton(work,"Weekend days",false,this::chooseWeekends);
+        work.addView(text("Weekend colors are for the calendar. Reminder repeat days are set in Schedule.",12,MUTED,false));
         LinearLayout c=card(body); c.addView(text("NOTIFICATIONS",11,LIME,true));
         preference(c,"All reminders","notifications",true); preference(c,"Play sound","sound",true); preference(c,"Vibrate","vibration",true);
         c.addView(text("Sound and vibration also follow your phone’s notification and Do Not Disturb settings.",12,MUTED,false));
         space(c,12); fullButton(c,"Send a test notification",false,()-> {
-            if(!store.prefs.getBoolean("notifications",true)) Toast.makeText(this,"Turn on All reminders first",Toast.LENGTH_SHORT).show();
+            if(store.silent(LocalDate.now())) Toast.makeText(this,"Notifications are paused today",Toast.LENGTH_SHORT).show();
+            else if(!store.prefs.getBoolean("notifications",true)) Toast.makeText(this,"Turn on All reminders first",Toast.LENGTH_SHORT).show();
             else if(!getSystemService(NotificationManager.class).areNotificationsEnabled()) permission();
             else ReminderScheduler.notify(this,999,"You’re all set","4Emp reminders are ready for your workday.");
         });
@@ -288,21 +378,28 @@ public class MainActivity extends Activity {
         precision.addView(text(ReminderScheduler.precise(this)?"Precise reminders enabled":"Flexible reminders enabled",18,TEXT,true));
         precision.addView(text("Allow precise reminders for your chosen times. Otherwise Android may delay alerts to save battery. Force-stopping the app pauses reminders until you open it again.",13,MUTED,false));
         if(Build.VERSION.SDK_INT>=31 && !ReminderScheduler.precise(this)) { space(precision,12); fullButton(precision,"Allow precise reminders",false,()->startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())))); }
-        LinearLayout privacy=card(body); privacy.addView(text("Made for your workday.",18,TEXT,true)); privacy.addView(text("4Emp 1.1 · Android\nAttendance stays on this device. No account needed. Swipe actions are manual records; connect with your employer separately to submit attendance or timesheets. Elapsed time includes breaks.",13,MUTED,false));
+        LinearLayout privacy=card(body); privacy.addView(text("Made for your workday.",18,TEXT,true)); privacy.addView(text("4Emp 1.2 · Android\nAttendance stays on this device. No account needed. Swipe actions are manual records; connect with your employer separately to submit attendance or timesheets. Elapsed time includes breaks.",13,MUTED,false));
     }
     private void chooseWorkHours() {
-        new AlertDialog.Builder(this).setTitle("Work hours")
-            .setItems(new String[]{"9 hours","6 hours","Custom duration"},(d,which)-> {
-                if(which<2) { saveWorkMinutes(which==0?540:360); return; }
-                TimePickerDialog picker=new TimePickerDialog(this,(v,h,m)-> {
-                    int minutes=h*60+m;
-                    if(minutes==0) Toast.makeText(this,"Choose at least one minute",Toast.LENGTH_SHORT).show(); else saveWorkMinutes(minutes);
-                },store.workMinutes()/60,store.workMinutes()%60,true);
-                picker.setTitle("Work duration (hours : minutes)"); picker.show();
-            }).setNegativeButton("Cancel",null).show();
+        LinearLayout form=column(); form.setPadding(dp(24),dp(8),dp(24),dp(16));
+        form.addView(text("Hours",13,MUTED,false)); EditText h=input(form,"Hours",Integer.toString(store.workMinutes()/60)); h.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        form.addView(text("Minutes",13,MUTED,false)); EditText m=input(form,"Minutes",Integer.toString(store.workMinutes()%60)); m.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        Switch apply=new Switch(this); apply.setText("Apply to active shift too"); apply.setChecked(false); if(store.active()!=null) form.addView(apply);
+        form.addView(text("Choose between 1 minute and 24 hours. Saved for future shifts.",12,MUTED,false));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Work duration").setView(form).setPositiveButton("Save",null).setNegativeButton("Cancel",null).create();
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v-> {
+            try {
+                int hour=Integer.parseInt(h.getText().toString()),minute=Integer.parseInt(m.getText().toString());
+                if(hour<0 || hour>24 || minute<0 || minute>59 || hour*60+minute<1 || hour*60+minute>1440) throw new IllegalArgumentException();
+                store.changeWorkMinutes(hour*60+minute,apply.isChecked()); ReminderScheduler.all(this); dialog.dismiss(); render();
+            } catch(IllegalArgumentException invalid) { Toast.makeText(this,"Enter 0–24 hours and 0–59 minutes, totaling 1 minute to 24 hours",Toast.LENGTH_LONG).show(); }
+        })); dialog.show();
     }
-    private void saveWorkMinutes(int minutes) {
-        store.prefs.edit().putInt("workMinutes",minutes).apply(); ReminderScheduler.all(this); render();
+    private void chooseWeekends() {
+        int mask=store.prefs.getInt("weekends",96); boolean[] checked=new boolean[7]; for(int i=0;i<7;i++) checked[i]=(mask&(1<<i))!=0;
+        new AlertDialog.Builder(this).setTitle("Weekend days").setMultiChoiceItems(new String[]{"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"},checked,(d,w,c)->checked[w]=c)
+            .setPositiveButton("Save",(d,w)->{int result=0; for(int i=0;i<7;i++) if(checked[i]) result|=1<<i; store.prefs.edit().putInt("weekends",result).apply(); render();})
+            .setNegativeButton("Cancel",null).show();
     }
     private void permission() {
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},42);

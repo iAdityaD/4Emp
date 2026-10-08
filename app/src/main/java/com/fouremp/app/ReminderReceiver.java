@@ -11,7 +11,7 @@ public class ReminderReceiver extends BroadcastReceiver {
         for(Store.Reminder r:new Store(c).reminders()) if(r.id==id) {
             // Re-check enabled days: an old alarm may race with an edit or a clock change.
             int today=LocalDate.now().getDayOfWeek().getValue()-1;
-            if(r.enabled && (r.days & (1<<today))!=0) {
+            if(r.enabled && !new Store(c).silent(LocalDate.now()) && (r.days & (1<<today))!=0) {
                 Store store=new Store(c);
                 String message=r.message;
                 if(r.id==1) message+=" Swipe in by "+String.format(java.util.Locale.getDefault(),"%02d:%02d",WorkMath.latestMinute(store.dayEnd(),store.workMinutes())/60,WorkMath.latestMinute(store.dayEnd(),store.workMinutes())%60)+" to finish by "+String.format(java.util.Locale.getDefault(),"%02d:%02d",store.dayEnd()/60,store.dayEnd()%60)+".";

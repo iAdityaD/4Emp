@@ -3,6 +3,7 @@ package com.fouremp.app;
 import android.content.*;
 import org.json.*;
 import java.util.*;
+import java.time.*;
 
 final class Store {
     final SharedPreferences prefs;
@@ -69,6 +70,41 @@ final class Store {
         JSONArray a=shifts();
         try { a.getJSONObject(index).put("in",in).put("out",out); } catch(JSONException e) { throw new IllegalStateException(e); }
         prefs.edit().putString("shifts",a.toString()).apply();
+    }
+    JSONObject calendarDays() {
+        try { return new JSONObject(prefs.getString("calendarDays","{}")); }
+        catch(JSONException e) { throw new IllegalStateException(e); }
+    }
+    String dayMark(LocalDate date) { return calendarDays().optString(date.toString(),""); }
+    void markDay(LocalDate date,String mark) {
+        JSONObject days=calendarDays();
+        try { if(mark.isEmpty()) days.remove(date.toString()); else days.put(date.toString(),mark); }
+        catch(JSONException e) { throw new IllegalStateException(e); }
+        prefs.edit().putString("calendarDays",days.toString()).apply();
+    }
+    Set<LocalDate> silentDates() {
+        Set<LocalDate> result=new HashSet<>(); JSONObject days=calendarDays(); Iterator<String> keys=days.keys();
+        while(keys.hasNext()) { String key=keys.next(); String mark=days.optString(key); if(mark.equals("leave") || mark.equals("holiday")) result.add(LocalDate.parse(key)); }
+        return result;
+    }
+    boolean silent(LocalDate date) { String mark=dayMark(date); return mark.equals("leave") || mark.equals("holiday"); }
+    boolean weekend(LocalDate date) { return DayMath.weekend(date,prefs.getInt("weekends",96)); }
+    Set<LocalDate> workedDates(YearMonth month) {
+        Set<LocalDate> result=new HashSet<>(); JSONArray shifts=shifts(); JSONObject marks=calendarDays();
+        for(int day=1;day<=month.lengthOfMonth();day++) {
+            LocalDate date=month.atDay(day);
+            if(marks.optString(date.toString()).equals("worked")) result.add(date);
+            for(int i=0;i<shifts.length();i++) { JSONObject shift=shifts.optJSONObject(i); if(DayMath.worked(date,shift.optLong("in"),shift.optLong("out"),System.currentTimeMillis(),ZoneId.systemDefault())) { result.add(date); break; } }
+        }
+        return result;
+    }
+    void changeWorkMinutes(int minutes,boolean updateActive) {
+        WorkMath.target(0,minutes); prefs.edit().putInt("workMinutes",minutes).apply();
+        JSONArray shifts=shifts();
+        if(updateActive && active()!=null) {
+            try { shifts.getJSONObject(shifts.length()-1).put("workMinutes",minutes); } catch(JSONException e) { throw new IllegalStateException(e); }
+            prefs.edit().putString("shifts",shifts.toString()).apply();
+        }
     }
     int newId() { int id=prefs.getInt("nextId",100); prefs.edit().putInt("nextId",id+1).apply(); return id; }
 }

@@ -24,13 +24,14 @@ final class ReminderScheduler {
             org.json.JSONObject active=store.active();
             if(active==null) return;
             next=store.target(active);
+            if(store.silent(java.time.Instant.ofEpochMilli(next).atZone(ZoneId.systemDefault()).toLocalDate())) return;
             if(store.prefs.getLong("completionDelivered",0)==next) return;
             if(next<=System.currentTimeMillis()) { complete(c,next); return; }
             operation=completionIntent(c,next);
         } else {
             if(r.id==1 && store.workMinutes()>WorkMath.windowMinutes(store.dayStart(),store.dayEnd())) return;
             int minute=r.id==1?WorkMath.latestMinute(store.dayEnd(),store.workMinutes()):r.time;
-            next=ScheduleMath.next(System.currentTimeMillis(),ZoneId.systemDefault(),minute,r.days);
+            next=DayMath.nextReminder(System.currentTimeMillis(),ZoneId.systemDefault(),minute,r.days,store.silentDates());
             operation=intent(c,r.id);
         }
         AlarmManager manager=c.getSystemService(AlarmManager.class);
@@ -41,6 +42,7 @@ final class ReminderScheduler {
     }
     static void complete(Context c,long expected) {
         Store store=new Store(c); org.json.JSONObject active=store.active();
+        if(store.silent(java.time.LocalDate.now()) || store.silent(java.time.Instant.ofEpochMilli(expected).atZone(ZoneId.systemDefault()).toLocalDate())) return;
         if(active==null || store.target(active)!=expected || expected>System.currentTimeMillis() || store.prefs.getLong("completionDelivered",0)==expected) return;
         if(!store.prefs.getBoolean("notifications",true) || !c.getSystemService(NotificationManager.class).areNotificationsEnabled()) return;
         for(Store.Reminder r:store.reminders()) if(r.id==2 && r.enabled) {
@@ -61,7 +63,7 @@ final class ReminderScheduler {
         return id;
     }
     static void notify(Context c,int id,String title,String message) {
-        if(!new Store(c).prefs.getBoolean("notifications",true)) return;
+        if(!new Store(c).prefs.getBoolean("notifications",true) || new Store(c).silent(java.time.LocalDate.now())) return;
         NotificationManager manager=c.getSystemService(NotificationManager.class);
         if(!manager.areNotificationsEnabled()) return;
         PendingIntent open=PendingIntent.getActivity(c,0,new Intent(c,MainActivity.class),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);

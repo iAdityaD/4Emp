@@ -9,6 +9,9 @@ public class WorkMathTest {
         long in=at("2026-10-07T09:04",zone);
         eq(at("2026-10-07T18:04",zone),WorkMath.target(in,540));
         eq(at("2026-10-07T15:04",zone),WorkMath.target(in,360));
+        eq(at("2026-10-07T16:04",zone),WorkMath.target(in,420));
+        eq(at("2026-10-07T15:34",zone),WorkMath.target(in,390));
+        eq(at("2026-10-08T09:04",zone),WorkMath.target(in,1440));
         eq(at("2026-10-08T07:45",zone),WorkMath.target(at("2026-10-07T22:45",zone),540));
         eq(540,WorkMath.latestMinute(1080,540));
         eq(720,WorkMath.latestMinute(1080,360));
