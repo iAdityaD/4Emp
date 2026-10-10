@@ -164,3 +164,20 @@ test("foreign keys enforce relationships and active shift uniqueness; flexible t
   );
   sql.close();
 });
+
+test("time correction rejects invalid input without writes and closes live breaks atomically", async () => {
+  const sql = setup();
+  await ShiftRepository.start("OFFICE", 0, defaultSettings);
+  const shift = (await ShiftRepository.all())[0]!;
+  const earlier = Date.parse(shift.first_swipe_in) - 60000;
+  await assert.rejects(() => ShiftRepository.edit(shift, earlier, NaN, "bad"));
+  assert.equal(
+    (await ShiftRepository.all())[0]!.first_swipe_in,
+    shift.first_swipe_in,
+  );
+  await ShiftRepository.toggleBreak(shift);
+  await ShiftRepository.edit(shift, earlier, Date.now(), "corrected");
+  assert.equal((await ShiftRepository.all())[0]!.status, "COMPLETED");
+  assert.ok((await ShiftRepository.breaks())[0]!.break_end);
+  sql.close();
+});

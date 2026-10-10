@@ -72,42 +72,12 @@ export const ShiftRepository = {
     });
   },
   async complete(shift: Shift, end = Date.now(), notes?: string) {
-    const start = Date.parse(shift.first_swipe_in);
-    if (end < start || end > Date.now())
-      throw Error("Swipe out must be after swipe in and not in the future");
-    const all = await this.breaks();
-    if (
-      all.some(
-        (b) =>
-          b.shift_id === shift.id &&
-          (Date.parse(b.break_start) > end ||
-            (b.break_end && Date.parse(b.break_end) > end)),
-      )
-    )
-      throw Error(
-        "Swipe out cannot precede recorded breaks. Correct break records first.",
-      );
-    const other = await db().getFirstAsync<Shift>(
-      "SELECT * FROM work_shifts WHERE id<>? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at)>?",
-      shift.id,
-      new Date(end).toISOString(),
-      shift.first_swipe_in,
+    await this.edit(
+      shift,
+      Date.parse(shift.first_swipe_in),
+      end,
+      notes ?? shift.notes ?? "",
     );
-    if (other) throw Error("This time overlaps another shift");
-    await db().withExclusiveTransactionAsync(async (tx) => {
-      await tx.runAsync(
-        "UPDATE shift_breaks SET break_end=?,duration_minutes=(julianday(?)-julianday(break_start))*1440 WHERE shift_id=? AND break_end IS NULL",
-        new Date(end).toISOString(),
-        new Date(end).toISOString(),
-        shift.id,
-      );
-      await tx.runAsync(
-        "UPDATE work_shifts SET status='COMPLETED',last_swipe_out=?,notes=? WHERE id=?",
-        new Date(end).toISOString(),
-        notes ?? shift.notes,
-        shift.id,
-      );
-    });
   },
   async edit(shift: Shift, start: number, end: number | null, notes: string) {
     if (
@@ -138,14 +108,24 @@ export const ShiftRepository = {
       new Date(start).toISOString(),
     );
     if (other) throw Error("Shift times overlap");
-    await db().runAsync(
-      "UPDATE work_shifts SET first_swipe_in=?,last_swipe_out=?,notes=?,status=? WHERE id=?",
-      new Date(start).toISOString(),
-      end === null ? null : new Date(end).toISOString(),
-      notes,
-      end === null ? shift.status : "COMPLETED",
-      shift.id,
-    );
+    await db().withExclusiveTransactionAsync(async (tx) => {
+      if (end !== null) {
+        await tx.runAsync(
+          "UPDATE shift_breaks SET break_end=?,duration_minutes=(julianday(?)-julianday(break_start))*1440 WHERE shift_id=? AND break_end IS NULL",
+          new Date(end).toISOString(),
+          new Date(end).toISOString(),
+          shift.id,
+        );
+      }
+      await tx.runAsync(
+        "UPDATE work_shifts SET first_swipe_in=?,last_swipe_out=?,notes=?,status=? WHERE id=?",
+        new Date(start).toISOString(),
+        end === null ? null : new Date(end).toISOString(),
+        notes,
+        end === null ? shift.status : "COMPLETED",
+        shift.id,
+      );
+    });
   },
   async changeTarget(shift: Shift, minutes: number) {
     if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440)

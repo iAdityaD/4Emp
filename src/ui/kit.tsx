@@ -78,7 +78,7 @@ export function Page({
 }) {
   const t = useTheme();
   const inner = (
-    <View style={{ padding: 22, gap: 16 }}>
+    <View style={{ padding: 22, gap: 16, flex: scroll ? undefined : 1 }}>
       <Label size={28} weight>
         {title}
       </Label>

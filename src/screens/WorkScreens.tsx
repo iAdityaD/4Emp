@@ -353,15 +353,7 @@ export function ShiftDetailsScreen() {
               async () => {
                 const a = Date.parse(start),
                   b = Date.parse(end);
-                if (shift.status !== "COMPLETED") {
-                  if (a !== Date.parse(shift.first_swipe_in))
-                    await ShiftRepository.edit(shift, a, null, notes);
-                  await ShiftRepository.complete(
-                    { ...shift, first_swipe_in: new Date(a).toISOString() },
-                    b,
-                    notes,
-                  );
-                } else await ShiftRepository.edit(shift, a, b, notes);
+                await ShiftRepository.edit(shift, a, b, notes);
               },
               () => nav.goBack(),
             )

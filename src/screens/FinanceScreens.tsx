@@ -127,7 +127,7 @@ export function TransactionsScreen() {
           onPress={() => nav.navigate("Rebalance")}
         />
       </Row>
-      <View style={{ height: 450 }}>
+      <View style={{ flex: 1, minHeight: 120 }}>
         <FlashList
           data={s.transactions}
           estimatedItemSize={76}
