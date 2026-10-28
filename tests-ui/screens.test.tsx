@@ -217,3 +217,20 @@ it("incomplete signed amounts cannot silently become a zero reconciliation", () 
   fireEvent.changeText(s.getByLabelText("Balance"), "-12.50");
   expect(change).toHaveBeenLastCalledWith(-1250);
 });
+
+it("focused text fields do not select newly typed characters on focus", () => {
+  const change = jest.fn();
+  const s = render(
+    <FieldControl
+      spec={{ key: "name", label: "Name", type: "text", icon: "text-outline" }}
+      value=""
+      onChange={change}
+    />,
+  );
+  const input = s.getByLabelText("Name");
+  expect(input.props.selectTextOnFocus).not.toBe(true);
+  expect(input.props.autoCorrect).toBe(false);
+  fireEvent.changeText(input, "Q");
+  fireEvent.changeText(input, "QA-Pets");
+  expect(s.getByDisplayValue("QA-Pets")).toBeTruthy();
+});

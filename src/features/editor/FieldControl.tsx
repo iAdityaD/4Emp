@@ -274,7 +274,8 @@ export function FieldControl({
         }
         multiline={["note", "notes", "message"].includes(spec.key)}
         autoFocus
-        selectTextOnFocus
+        autoCorrect={false}
+        autoCapitalize={spec.key === "currency" ? "characters" : "sentences"}
         placeholder={spec.type === "money" ? "0" : spec.label}
         placeholderTextColor={t.muted}
         style={{
