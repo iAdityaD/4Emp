@@ -189,3 +189,34 @@ test("time correction rejects invalid input without writes and closes live break
   assert.ok((await ShiftRepository.breaks())[0]!.break_end);
   sql.close();
 });
+test("editing a monthly bill preserves settled cycles and their original ledger amounts", async () => {
+  const sql = setup();
+  await CommitmentRepository.add({
+    title: "Rent",
+    amount: 100,
+    due_day_of_month: 1,
+    account_id: "bank1",
+    commitment_type: "RENT",
+  });
+  const c = (await CommitmentRepository.all())[0]!;
+  await CommitmentRepository.pay(c, "2026-10");
+  await CommitmentRepository.update(c.id, {
+    title: "Rent",
+    amount: 150,
+    due_day_of_month: 3,
+    account_id: "bank2",
+    commitment_type: "RENT",
+  });
+  assert.equal((await CommitmentRepository.all())[0]!.amount, 150);
+  assert.equal(
+    sql
+      .prepare(
+        "SELECT amount_minor FROM transactions WHERE ledger_kind='COMMITMENT'",
+      )
+      .get()!.amount_minor,
+    10000,
+  );
+  await assert.rejects(() => CommitmentRepository.pay(c, "2026-10"));
+  assert.equal(sql.prepare("SELECT COUNT(*) n FROM transactions").get()!.n, 1);
+  sql.close();
+});

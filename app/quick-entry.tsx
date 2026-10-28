@@ -1,1 +1,1 @@
-export { QuickEntryScreen as default } from "../src/screens/FinanceScreens";
+export { EntryScreen as default } from "../src/features/entry/EntryScreen";

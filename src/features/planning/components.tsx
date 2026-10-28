@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, Switch, View } from "react-native";
-import { useNav } from "../../ui/navigation";
 import { useStore } from "../../state/store";
 import { Button, Card, Chips, Label, Row, useTheme } from "../../ui/kit";
+import { useNav } from "../../ui/navigation";
 export function Money({
   minor,
   large = false,
@@ -148,7 +148,7 @@ export function AccountChoice({
     return (
       <Button
         title="Create an account"
-        onPress={() => nav.navigate("AccountEdit")}
+        onPress={() => nav.navigate("Accounts")}
       />
     );
   return (
@@ -172,21 +172,29 @@ export function CategoryChoice({
   onChange: (v: string) => void;
   kind?: string;
 }) {
+  const nav = useNav();
   const categories = useStore((s) => s.categories);
   const list = categories.filter(
     (c) =>
       c.is_active && (kind === "BOTH" || c.kind === kind || c.kind === "BOTH"),
   );
   return (
-    <Chips
-      values={["", ...list.map((c) => c.id)]}
-      labels={{
-        "": "Uncategorized",
-        ...Object.fromEntries(list.map((c) => [c.id, c.name])),
-      }}
-      value={value}
-      onChange={onChange}
-    />
+    <View style={{ gap: 12 }}>
+      <Chips
+        values={["", ...list.map((c) => c.id)]}
+        labels={{
+          "": "Uncategorized",
+          ...Object.fromEntries(list.map((c) => [c.id, c.name])),
+        }}
+        value={value}
+        onChange={onChange}
+      />
+      <Button
+        title="Manage categories"
+        secondary
+        onPress={() => nav.navigate("Categories")}
+      />
+    </View>
   );
 }
 export function WeekdayChoice({
@@ -197,7 +205,7 @@ export function WeekdayChoice({
   onChange: (value: number) => void;
 }) {
   return (
-    <Row>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, i) => (
         <Button
           key={day}
@@ -206,6 +214,6 @@ export function WeekdayChoice({
           onPress={() => onChange(value ^ (1 << i))}
         />
       ))}
-    </Row>
+    </View>
   );
 }

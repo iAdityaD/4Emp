@@ -1,37 +1,37 @@
-import React, { useState } from "react";
-import { View, Alert, Pressable } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import {
-  Page,
-  Card,
-  Row,
-  Label,
-  Button,
-  Chips,
-  Field,
-  Edit,
-  useTheme,
-  useNow,
-  act,
-} from "../ui/kit";
-import { Ring } from "../ui/Ring";
-import { RootStack, useNav } from "../ui/navigation";
-import { useStore } from "../state/store";
+import React, { useState } from "react";
+import { Alert, Pressable, View } from "react-native";
 import { ShiftType } from "../domain/models";
 import {
   clock,
+  dateKey,
   hours,
+  localDate,
   metrics,
   safeArrival,
-  dateKey,
-  localDate,
   shiftTarget,
-  formTime,
 } from "../domain/shift";
-import { ShiftRepository } from "../repositories/ShiftRepository";
+import { DurationControl } from "../features/design/controls";
 import { HolidayRepository } from "../repositories/HolidayRepository";
-import { SettingsRepository } from "../repositories/SettingsRepository";
+import { ShiftRepository } from "../repositories/ShiftRepository";
+import { useStore } from "../state/store";
+import {
+  act,
+  Button,
+  Card,
+  Chips,
+  Edit,
+  Field,
+  Label,
+  Page,
+  Row,
+  useNow,
+  useTheme,
+} from "../ui/kit";
+import { RootStack, useNav } from "../ui/navigation";
+import { Ring } from "../ui/Ring";
 const types: ShiftType[] = [
   "OFFICE",
   "WFH",
@@ -87,9 +87,7 @@ export function HomeScreen() {
   const leave = () =>
     Alert.alert(
       "On leave today?",
-      active
-        ? "Record swipe out now and pause today’s reminders?"
-        : "Pause all reminders for today?",
+      active ? "End this shift and mark leave?" : "Pause work reminders today?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -121,7 +119,7 @@ export function HomeScreen() {
             onPress={() => nav.navigate("Calendar")}
             style={{ padding: 12 }}
           >
-            <Label color={t.cyan}>Calendar</Label>
+            <Ionicons name="calendar-outline" color={t.cyan} size={22} />
           </Pressable>
           <Edit
             label="Timing settings"
@@ -178,11 +176,9 @@ export function HomeScreen() {
               </Label>
               <Chips values={types} value={type} onChange={setType} />
               {type === "CUSTOM" && (
-                <Field
-                  label="Today’s custom target (minutes)"
-                  value={custom}
-                  onChange={setCustom}
-                  numeric
+                <DurationControl
+                  value={Number(custom)}
+                  onChange={(v) => setCustom(String(v))}
                 />
               )}
             </>
@@ -273,151 +269,13 @@ export function HomeScreen() {
     </Page>
   );
 }
-export function SafeArrivalScreen() {
-  const s = useStore(),
-    now = useNow(),
-    [minutes, setMinutes] = useState(String(s.settings.baseline));
-  const a = safeArrival(
-    now,
-    s.settings.cutoff,
-    s.settings.baseline,
-    s.settings.buffer,
-  );
-  return (
-    <Page title="Safe arrival" subtitle="Your company day, your safety margin.">
-      <Card>
-        <Label size={28} weight>
-          {clock(a.latest)}
-        </Label>
-        <Label muted>Latest safe arrival • reset {clock(a.cutoff)}</Label>
-      </Card>
-      <Card>
-        <Field
-          label="Mandatory minutes"
-          value={minutes}
-          onChange={setMinutes}
-          numeric
-        />
-        <Button
-          title="Save target"
-          onPress={() =>
-            void act(async () => {
-              const n = Number(minutes);
-              if (!Number.isFinite(n) || n < 1 || n > 1440)
-                throw Error("Choose 1–1440 minutes");
-              await SettingsRepository.save("baseline", n);
-            })
-          }
-        />
-        <Chips
-          values={["GROSS", "NET"] as const}
-          value={s.settings.mode}
-          onChange={(v) => void s.configure("mode", v)}
-        />
-        <Label muted>Grace buffer</Label>
-        <Chips
-          values={["0", "3", "5", "10"]}
-          value={String(s.settings.buffer)}
-          onChange={(v) => void s.configure("buffer", Number(v))}
-        />
-      </Card>
-    </Page>
-  );
-}
-export function ShiftDetailsScreen() {
-  const { params } = useRoute<RouteProp<RootStack, "ShiftDetails">>(),
-    s = useStore(),
-    nav = useNav(),
-    now = useNow();
-  const shift = s.shifts.find((x) => x.id === params.shiftId);
-  const [start, setStart] = useState(
-      shift ? formTime(shift.first_swipe_in) : "",
-    ),
-    [end, setEnd] = useState(
-      shift?.last_swipe_out
-        ? formTime(shift.last_swipe_out)
-        : formTime(
-            Math.min(
-              now,
-              Date.parse(shift?.cutoff_at ?? new Date(now).toISOString()),
-            ),
-          ),
-    ),
-    [notes, setNotes] = useState(shift?.notes ?? ""),
-    [target, setTarget] = useState(String(shift?.target_minutes ?? 0));
-  if (!shift)
-    return (
-      <Page title="Shift unavailable">
-        <Label>No record found.</Label>
-      </Page>
-    );
-  return (
-    <Page
-      title={
-        shift.status === "NEEDS_REVIEW"
-          ? "Confirm yesterday’s swipe out"
-          : "Shift details"
-      }
-      subtitle="Enter local date and time: YYYY-MM-DDTHH:mm."
-    >
-      <Card>
-        <Label>
-          {shift.work_date} • {shift.shift_type} • {shift.status}
-        </Label>
-        <Field label="Swipe in" value={start} onChange={setStart} />
-        <Field label="Swipe out" value={end} onChange={setEnd} />
-        <Field label="Notes" value={notes} onChange={setNotes} multiline />
-        <Button
-          title="Confirm times"
-          onPress={() =>
-            void act(
-              async () => {
-                const a = Date.parse(start),
-                  b = Date.parse(end);
-                await ShiftRepository.edit(shift, a, b, notes);
-              },
-              () => nav.goBack(),
-            )
-          }
-        />
-      </Card>
-      {shift.shift_type !== "OPEN_ENDED" && (
-        <Card>
-          <Field
-            label="Override target minutes for this shift"
-            value={target}
-            onChange={setTarget}
-            numeric
-          />
-          <Button
-            secondary
-            title="Update target"
-            onPress={() =>
-              void act(() =>
-                ShiftRepository.changeTarget(shift, Number(target)),
-              )
-            }
-          />
-        </Card>
-      )}
-      <Button
-        secondary
-        title="Break history"
-        onPress={() => nav.navigate("BreakHistory", { shiftId: shift.id })}
-      />
-    </Page>
-  );
-}
 export function BreakHistoryScreen() {
   const { params } = useRoute<RouteProp<RootStack, "BreakHistory">>(),
     s = useStore(),
     nav = useNav();
   const list = s.breaks.filter((b) => b.shift_id === params.shiftId);
   return (
-    <Page
-      title="Break history"
-      subtitle="Gross keeps breaks; net subtracts them."
-    >
+    <Page title="Break history">
       {list.length === 0 && (
         <Card>
           <Label muted>No breaks recorded.</Label>

@@ -29,12 +29,23 @@ try:
  adb('shell','pm','grant','com.fouremp.app','android.permission.POST_NOTIFICATIONS')
  adb('shell','am','start','-W','-n','com.fouremp.app/.MainActivity')
  wait('Get started');shot('01-welcome');tap('Get started');wait('TOTAL BALANCE');shot('02-dashboard-light')
- tap('＋ Add entry');wait('Quick entry')
+ tap('Expense');wait('New entry')
  for key in ['1','2','3','4']:tap(key)
- tap('Done');wait('TOTAL BALANCE');shot('03-recorded-expense')
- for path,title,name in [('transactions','Transactions','04-transactions'),('planning','Plan your money','05-planning'),('salary','Salary','06-salary'),('loans','Loans & EMIs','07-loans'),('subscriptions','Subscriptions','08-subscriptions'),('budgets','Monthly budgets','09-budgets'),('goals','Savings goals','10-goals'),('finance-calendar','Money calendar','11-calendar'),('work','Your workday','12-work'),('work-settings','Work preferences','13-work-settings'),('insights','Insights','14-insights'),('more','More','15-more')]:
+ tap('Save entry');wait('TOTAL BALANCE');shot('03-recorded-expense')
+ for path,title,name in [('transactions','Activity','04-transactions'),('plan','Plan','05-planning'),('salary','Salary','06-salary'),('loans','Loans & EMIs','07-loans'),('subscriptions','Subscriptions','08-subscriptions'),('budgets','Monthly budgets','09-budgets'),('goals','Savings goals','10-goals'),('finance-calendar','Money calendar','11-calendar'),('work','Your workday','12-work'),('work-settings','Work settings','13-work-settings'),('insights','Insights','14-insights'),('more','Settings','15-more')]:
   deep(path);wait(title);shot(name)
- adb('shell','cmd','uimode','night','yes');deep('');wait('TOTAL BALANCE');shot('16-dashboard-dark')
+ # Validate focused native input screens and a complete multi-screen creation flow.
+ deep('edit/settings/baseline');wait('Daily target');wait('Hours');wait('Minutes');shot('16-hours-minutes')
+ deep('edit/settings/startOfDay');wait('Preferred start');tap('Choose time');wait('OK');shot('17-native-time-picker');adb('shell','input','keyevent','KEYCODE_BACK')
+ deep('edit/settings/accent');wait('Accent');tap('Choose color #3B82F6');shot('18-color-picker');tap('Save')
+ deep('categories');wait('Categories');tap('New category');wait('Name');
+ node=wait('Name');
+ # The editable field carries the same accessible name as the heading; target EditText.
+ node=next(n for n in dump().iter('node') if n.get('class')=='android.widget.EditText')
+ nums=list(map(int,re.findall(r'\d+',node.get('bounds'))));adb('shell','input','tap',(nums[0]+nums[2])//2,(nums[1]+nums[3])//2)
+ adb('shell','input','text','QA%spets');adb('shell','input','keyevent','KEYCODE_BACK');tap('Continue')
+ wait('Type');tap('Expense');tap('Continue');wait('Icon');tap('Continue');wait('Color');tap('Choose color #3B82F6');tap('Continue');wait('Review');shot('19-creation-review');tap('Create');wait('Categories');wait('QA pets');shot('20-custom-category')
+ adb('shell','cmd','uimode','night','yes');deep('');wait('TOTAL BALANCE');shot('21-dashboard-dark')
  logs=adb('logcat','-d').decode(errors='replace');(out/'logcat.txt').write_text(logs)
  if 'FATAL EXCEPTION' in logs or 'Unable to resolve module' in logs:raise AssertionError('Runtime crash in logcat')
  print('Android UI smoke passed: onboarding, real expense entry, all primary flows and adaptive theme.')

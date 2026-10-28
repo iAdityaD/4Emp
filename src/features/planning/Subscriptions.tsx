@@ -1,154 +1,186 @@
-import { useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert } from "react-native";
+import { View } from "react-native";
 import { dateKey } from "../../domain/shift";
-import { PlanningRepository } from "../../repositories/PlanningRepository";
 import { useStore } from "../../state/store";
-import { act, Button, Card, Chips, Edit, Label, Page, Row } from "../../ui/kit";
+import { Card, Chips, Label, Page, useTheme } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
+import { IconButton, MenuRow } from "../design/primitives";
+import { openField } from "../editor/Screens";
 import { occurrences } from "./calculations";
-import { AccountChoice, Money, Tile } from "./components";
+import { Money } from "./components";
+function forecast() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return dateKey(d);
+}
 export function SubscriptionsScreen() {
   const s = useStore(),
-    nav = useNav();
-  const [active, setActive] = useState("ACTIVE");
+    nav = useNav(),
+    [active, setActive] = useState("ACTIVE");
   return (
     <Page
       title="Subscriptions"
-      subtitle="Track renewals with any billing interval."
+      trailing={
+        <IconButton
+          icon="add"
+          label="New subscription"
+          onPress={() => nav.navigate("PlanEdit", { kind: "subscriptions" })}
+        />
+      }
     >
       <Chips
         values={["ACTIVE", "INACTIVE"]}
+        labels={{ ACTIVE: "Active", INACTIVE: "Paused" }}
         value={active}
         onChange={setActive}
       />
-      <Button
-        title="＋ New subscription"
-        onPress={() => nav.navigate("PlanEdit", { kind: "subscriptions" })}
-      />
-      {s.subscriptions
-        .filter((x) => !!x.is_active === (active === "ACTIVE"))
-        .map((r) => {
-          const dates = occurrences(
-            r.anchor_date,
-            r.interval_count,
-            r.interval_unit,
-            r.anchor_date,
-            dateKey(
-              new Date(
-                new Date().getFullYear() + 1,
-                new Date().getMonth(),
-                new Date().getDate(),
-              ),
-            ),
-          );
-          const next = dates.find(
-            (d) =>
-              !s.subscriptionPayments.some(
-                (p) => p.subscription_id === r.id && p.occurrence_date === d,
-              ),
-          );
-          return (
-            <Tile
-              key={r.id}
-              title={r.title}
-              subtitle={`Every ${r.interval_count} ${r.interval_unit.toLowerCase()} · Next unpaid ${next ?? "outside forecast"}`}
-              icon="repeat-outline"
-              right={<Money minor={r.amount_minor} />}
-              onPress={() => nav.navigate("SubscriptionDetails", { id: r.id })}
-            />
-          );
-        })}
+      <Card>
+        {s.subscriptions
+          .filter((x) => !!x.is_active === (active === "ACTIVE"))
+          .map((r) => {
+            const next = occurrences(
+              r.anchor_date,
+              r.interval_count,
+              r.interval_unit,
+              r.anchor_date,
+              forecast(),
+            ).find(
+              (d) =>
+                !s.subscriptionPayments.some(
+                  (p) => p.subscription_id === r.id && p.occurrence_date === d,
+                ),
+            );
+            return (
+              <MenuRow
+                key={r.id}
+                title={r.title}
+                value={next ?? "No due renewal"}
+                icon="repeat-outline"
+                trailing={<Money minor={r.amount_minor} />}
+                onPress={() =>
+                  nav.navigate("SubscriptionDetails", { id: r.id })
+                }
+              />
+            );
+          })}
+        {!s.subscriptions.filter((x) => !!x.is_active === (active === "ACTIVE"))
+          .length && <Label muted>No subscriptions</Label>}
+      </Card>
     </Page>
   );
 }
 export function SubscriptionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(),
     s = useStore(),
-    nav = useNav();
+    nav = useNav(),
+    router = useRouter(),
+    t = useTheme();
   const r = s.subscriptions.find((r) => r.id === id),
-    [account, setAccount] = useState(r?.account_id ?? "");
+    [tab, setTab] = useState("UPCOMING");
   if (!r)
     return (
       <Page title="Subscription unavailable">
-        <Label>No record.</Label>
+        <Label>No record</Label>
       </Page>
     );
   const dates = occurrences(
-    r.anchor_date,
-    r.interval_count,
-    r.interval_unit,
-    r.anchor_date,
-    dateKey(
-      new Date(
-        new Date().getFullYear() + 1,
-        new Date().getMonth(),
-        new Date().getDate(),
-      ),
+      r.anchor_date,
+      r.interval_count,
+      r.interval_unit,
+      r.anchor_date,
+      forecast(),
     ),
-  );
-  const unpaid = dates.filter(
-    (d) =>
-      !s.subscriptionPayments.some(
-        (p) => p.subscription_id === id && p.occurrence_date === d,
-      ),
-  );
+    unpaid = dates.filter(
+      (d) =>
+        !s.subscriptionPayments.some(
+          (p) => p.subscription_id === id && p.occurrence_date === d,
+        ),
+    );
   return (
     <Page
       title={r.title}
-      subtitle={`Every ${r.interval_count} ${r.interval_unit.toLowerCase()} · ${r.remind_days} day reminder`}
-    >
-      <Card>
-        <Money minor={r.amount_minor} large />
-        <Edit
+      trailing={
+        <IconButton
+          icon="options-outline"
+          label="Subscription settings"
           onPress={() =>
             nav.navigate("PlanEdit", { kind: "subscriptions", id })
           }
         />
-        <Label muted>Pay using</Label>
-        <AccountChoice value={account} onChange={setAccount} />
+      }
+    >
+      <View style={{ alignItems: "center", paddingVertical: 16, gap: 12 }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: 24,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: t.accent + "18",
+          }}
+        >
+          <Ionicons name="repeat-outline" size={36} color={t.accent} />
+        </View>
+        <Money minor={r.amount_minor} large />
+        <Label muted>
+          Every {r.interval_count} {r.interval_unit.toLowerCase()}
+        </Label>
+      </View>
+      <Card>
+        <MenuRow
+          title="Amount"
+          icon="cash-outline"
+          onPress={() =>
+            openField(router, "plan", "amount_minor", id, "subscriptions")
+          }
+        />
+        <MenuRow
+          title="Billing cycle"
+          icon="repeat-outline"
+          onPress={() =>
+            openField(router, "plan", "interval_unit", id, "subscriptions")
+          }
+        />
       </Card>
-      <Label weight>Next renewals</Label>
-      {unpaid.slice(0, 12).map((d) => (
-        <Card key={d}>
-          <Row>
-            <Label>
-              {d}
-              {d < dateKey() ? " · overdue" : ""}
-            </Label>
-            <Money minor={r.amount_minor} />
-          </Row>
-          <Button
-            title="Record renewal payment"
-            disabled={!r.is_active}
-            onPress={() =>
-              Alert.alert("Record this renewal?", d, [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Record",
-                  onPress: () =>
-                    void act(() =>
-                      PlanningRepository.paySubscription(id, d, account),
-                    ),
-                },
-              ])
-            }
-          />
-        </Card>
-      ))}
-      <Label weight>Payment history</Label>
-      {s.subscriptionPayments
-        .filter((p) => p.subscription_id === id)
-        .map((p) => (
-          <Tile
-            key={p.occurrence_date}
-            title={p.occurrence_date}
-            subtitle="Paid · tap to view or reverse"
-            onPress={() =>
-              nav.navigate("TransactionDetails", { id: p.transaction_id })
-            }
-          />
-        ))}
+      <Chips
+        values={["UPCOMING", "PAID"]}
+        labels={{ UPCOMING: "Renewals", PAID: "Paid" }}
+        value={tab}
+        onChange={setTab}
+      />
+      <Card>
+        {tab === "UPCOMING"
+          ? unpaid.slice(0, 12).map((d) => (
+              <MenuRow
+                key={d}
+                title={d}
+                value={d < dateKey() ? "Overdue" : undefined}
+                icon="calendar-outline"
+                trailing={<Money minor={r.amount_minor} />}
+                onPress={() =>
+                  router.push({
+                    pathname: "/record-payment",
+                    params: { kind: "SUBSCRIPTION", id, date: d },
+                  })
+                }
+              />
+            ))
+          : s.subscriptionPayments
+              .filter((p) => p.subscription_id === id)
+              .map((p) => (
+                <MenuRow
+                  key={p.occurrence_date}
+                  title={p.occurrence_date}
+                  icon="checkmark-circle-outline"
+                  onPress={() =>
+                    nav.navigate("TransactionDetails", { id: p.transaction_id })
+                  }
+                />
+              ))}
+      </Card>
     </Page>
   );
 }

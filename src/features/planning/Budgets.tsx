@@ -3,8 +3,9 @@ import { Pressable } from "react-native";
 import { currency } from "../../domain/finance";
 import { dateKey } from "../../domain/shift";
 import { useStore } from "../../state/store";
-import { Button, Card, Label, Page, Row, useTheme } from "../../ui/kit";
+import { Card, Label, Page, Row, useTheme } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
+import { IconButton } from "../design/primitives";
 import { budgetSpent } from "./calculations";
 import { Money, Progress } from "./components";
 import { Empty, MonthPicker } from "./screenKit";
@@ -17,16 +18,16 @@ export function BudgetsScreen() {
   return (
     <Page
       title="Monthly budgets"
-      subtitle="Limits you set, alerts you control."
+      trailing={
+        <IconButton
+          icon="add"
+          label="New budget"
+          onPress={() => nav.navigate("PlanEdit", { kind: "budgets" })}
+        />
+      }
     >
       <MonthPicker month={month} onChange={setMonth} />
-      <Button
-        title="＋ Set category budget"
-        onPress={() => nav.navigate("PlanEdit", { kind: "budgets" })}
-      />
-      {!rows.length && (
-        <Empty text="No limits for this month. Choose an expense category and a monthly amount." />
-      )}
+      {!rows.length && <Empty text="No budgets this month" />}
       {rows.map((b) => {
         const spent = budgetSpent(s.transactions, month, b.category_id);
         return (
@@ -64,7 +65,6 @@ export function BudgetsScreen() {
                       (b.limit_minor - spent) / 100,
                       s.settings.currency,
                     ) + " remaining"}{" "}
-                · Alert at {b.alert_percent}%
               </Label>
             </Card>
           </Pressable>

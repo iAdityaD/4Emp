@@ -1,1 +1,1 @@
-export { ShiftDetailsScreen as default } from "../src/screens/WorkScreens";
+export { WorkRecordScreen as default } from "../src/features/planning/WorkSettings";

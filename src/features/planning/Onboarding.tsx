@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { View } from "react-native";
 import Svg, {
@@ -9,7 +10,7 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 import { useStore } from "../../state/store";
-import { Button, Card, Label, Page, useTheme } from "../../ui/kit";
+import { Button, Label, Page, useTheme } from "../../ui/kit";
 export function OnboardingScreen() {
   const t = useTheme(),
     s = useStore();
@@ -52,29 +53,32 @@ export function OnboardingScreen() {
           <Label color="#C5E3DF">Money and work, on your terms.</Label>
         </View>
       </View>
-      <Card>
-        <Label weight>Offline & private</Label>
-        <Label muted>
-          Your records stay on this device. No bank connection and no sign-up.
-        </Label>
-        <Label weight>Built around you</Label>
-        <Label muted>
-          Choose your accounts, categories, payday, goals and work hours. Every
-          number starts with your own entries.
-        </Label>
-        <Label weight>Simple daily habits</Label>
-        <Label muted>
-          Log a purchase, plan a renewal, or swipe into a shift. Back up locally
-          whenever you choose.
-        </Label>
-      </Card>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-around",
+          paddingVertical: 20,
+        }}
+      >
+        {(
+          [
+            { label: "Offline", icon: "cloud-offline-outline" },
+            { label: "Private", icon: "shield-checkmark-outline" },
+            { label: "No login", icon: "person-outline" },
+          ] as const
+        ).map((item) => (
+          <View key={item.label} style={{ alignItems: "center", gap: 9 }}>
+            <Ionicons name={item.icon} color={t.accent} size={24} />
+            <Label muted size={12}>
+              {item.label}
+            </Label>
+          </View>
+        ))}
+      </View>
       <Button
         title="Get started"
         onPress={() => void s.configure("onboarded", true)}
       />
-      <Label muted size={11}>
-        No subscription or backend is required to use this app.
-      </Label>
     </Page>
   );
 }

@@ -1,1 +1,4 @@
-export { SettingsScreen as default } from "../src/screens/SystemScreens";
+import { Redirect } from "expo-router";
+export default function LegacySettings() {
+  return <Redirect href="/more" />;
+}

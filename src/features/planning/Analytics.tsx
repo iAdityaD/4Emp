@@ -50,10 +50,7 @@ export function AdvancedAnalyticsScreen() {
   let offset = 0;
   const circumference = 2 * Math.PI * 55;
   return (
-    <Page
-      title="Insights"
-      subtitle="Actual ledger data. Transfers and corrections stay out of spending."
-    >
+    <Page title="Insights">
       <MonthPicker month={month} onChange={setMonth} />
       <Card>
         <Row>

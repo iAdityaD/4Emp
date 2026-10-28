@@ -1,8 +1,11 @@
-import { useRouter, Href } from "expo-router";
+import { Href, useRouter } from "expo-router";
 export type RootStack = {
   ReminderEdit: { id?: string } | undefined;
   ManualShift: undefined;
   BreakEdit: { id: string };
+  Notifications: undefined;
+  Appearance: undefined;
+  MoneyPreferences: undefined;
   Main: undefined;
   Dashboard: undefined;
   ShiftDetails: { shiftId: string };
@@ -12,7 +15,7 @@ export type RootStack = {
   AddHoliday: { date?: string } | undefined;
   Holidays: undefined;
   Compliance: undefined;
-  QuickEntry: undefined;
+  QuickEntry: { type?: "EXPENSE" | "INCOME" | "TRANSFER" } | undefined;
   Transfer: undefined;
   Reimbursements: undefined;
   Commitments: undefined;
@@ -50,6 +53,9 @@ export const paths: Record<keyof RootStack, string> = {
   ReminderEdit: "/reminder-edit",
   ManualShift: "/manual-shift",
   BreakEdit: "/break-edit",
+  Notifications: "/notifications",
+  Appearance: "/appearance",
+  MoneyPreferences: "/money-preferences",
   Main: "/",
   Dashboard: "/",
   ShiftDetails: "/shift-details",
@@ -89,9 +95,9 @@ export const paths: Record<keyof RootStack, string> = {
   DueDetails: "/due-details",
   WorkSettings: "/work-settings",
   WorkProfiles: "/work-profiles",
-  Settings: "/settings",
+  Settings: "/more",
   Analytics: "/analytics",
-  Planning: "/planning",
+  Planning: "/plan",
 };
 export function useNav() {
   const router = useRouter();

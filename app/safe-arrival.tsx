@@ -1,1 +1,4 @@
-export { SafeArrivalScreen as default } from "../src/screens/WorkScreens";
+import { Redirect } from "expo-router";
+export default function ArrivalAlias() {
+  return <Redirect href="/work" />;
+}

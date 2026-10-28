@@ -1,10 +1,12 @@
 jest.mock("expo-router", () => ({
   useSegments: () => [],
-  useRouter: () => ({
+  useRouter: jest.fn(() => ({
     push: jest.fn(),
+    replace: jest.fn(),
+    dismissTo: jest.fn(),
     back: jest.fn(),
     canGoBack: () => true,
-  }),
+  })),
   useLocalSearchParams: jest.fn(() => ({})),
   useRootNavigationState: () => ({ key: "root" }),
 }));

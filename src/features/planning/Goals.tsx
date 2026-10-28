@@ -10,14 +10,15 @@ import {
   Button,
   Card,
   Chips,
-  Edit,
   Field,
   Label,
   Page,
   Row,
 } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
-import { AccountChoice, Money, Progress } from "./components";
+import { ProgressOrbit } from "../design/charts";
+import { IconButton, InfoButton } from "../design/primitives";
+import { AccountChoice, Money } from "./components";
 import { Empty } from "./screenKit";
 export function GoalsScreen() {
   const s = useStore(),
@@ -37,20 +38,20 @@ export function GoalsScreen() {
   return (
     <Page
       title="Savings goals"
-      subtitle="Set an intention. Give it a place in your money."
+      trailing={
+        <IconButton
+          icon="add"
+          label="New goal"
+          onPress={() => nav.navigate("PlanEdit", { kind: "goals" })}
+        />
+      }
     >
       <Chips
         values={["ACTIVE", "COMPLETE", "ARCHIVED"]}
         value={tab}
         onChange={setTab}
       />
-      <Button
-        title="＋ Create goal"
-        onPress={() => nav.navigate("PlanEdit", { kind: "goals" })}
-      />
-      {!rows.length && (
-        <Empty text="No goals in this view. Add your own target and optional deadline." />
-      )}
+      {!rows.length && <Empty text="No goals here" />}
       {rows.map((g) => {
         const total = s.contributions
           .filter((c) => c.goal_id === g.id)
@@ -67,7 +68,10 @@ export function GoalsScreen() {
                 of {currency(g.target_minor / 100, s.settings.currency)}
                 {g.deadline ? " · " + g.deadline : ""}
               </Label>
-              <Progress value={total / g.target_minor} color={g.color_hex} />
+              <ProgressOrbit
+                value={total / g.target_minor}
+                color={g.color_hex}
+              />
             </Card>
           </Pressable>
         );
@@ -93,10 +97,13 @@ export function GoalDetailsScreen() {
   return (
     <Page
       title={g.title}
-      subtitle={
-        g.deadline
-          ? "Target date " + g.deadline
-          : "No deadline. Move at your own pace."
+      subtitle={g.deadline ?? undefined}
+      trailing={
+        <IconButton
+          icon="options-outline"
+          label="Goal settings"
+          onPress={() => nav.navigate("PlanEdit", { kind: "goals", id })}
+        />
       }
     >
       <Card>
@@ -104,22 +111,18 @@ export function GoalDetailsScreen() {
         <Label muted>
           Target {currency(g.target_minor / 100, s.settings.currency)}
         </Label>
-        <Progress value={total / g.target_minor} color={g.color_hex} />
+        <ProgressOrbit value={total / g.target_minor} color={g.color_hex} />
         <Row>
           <Button
-            title="Reserve / release"
+            title="Contribute"
+            icon="add"
             disabled={!g.is_active}
             onPress={() => nav.navigate("Contribution", { id })}
-          />
-          <Edit
-            onPress={() => nav.navigate("PlanEdit", { kind: "goals", id })}
           />
         </Row>
       </Card>
       <Label weight>Contributions</Label>
-      {!rows.length && (
-        <Empty text="Reserve money from any of your accounts to start." />
-      )}
+      {!rows.length && <Empty text="No contributions yet" />}
       {rows.map((c) => (
         <Card key={c.id}>
           <Row>
@@ -161,7 +164,12 @@ export function ContributionScreen() {
   return (
     <Page
       title="Goal contribution"
-      subtitle="Reserving earmarks existing money; it does not debit the account. Optionally transfer it to another account. Releasing removes an allocation without inventing income."
+      trailing={
+        <InfoButton
+          title="Goal contribution"
+          text="Reserving earmarks money you already own. Releasing returns it to your available amount. An optional transfer moves it between accounts."
+        />
+      }
     >
       <Card>
         <Chips

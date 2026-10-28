@@ -1,27 +1,26 @@
-import { useRouter, useSegments } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useEffect, useState } from "react";
+import { useRouter, useSegments } from "expo-router";
+import React, { useState } from "react";
 import {
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-  TextInput,
-  StyleSheet,
-  useColorScheme,
-  useWindowDimensions,
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useColorScheme,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   FadeInDown,
-  useFrameCallback,
   runOnJS,
+  useFrameCallback,
 } from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "../state/store";
 export function useTheme() {
   const accent = useStore((s) => s.settings.accent);
@@ -84,11 +83,13 @@ export function Page({
   subtitle,
   children,
   scroll = true,
+  trailing,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   scroll?: boolean;
+  trailing?: React.ReactNode;
 }) {
   const t = useTheme(),
     router = useRouter(),
@@ -120,6 +121,7 @@ export function Page({
             {title}
           </Label>
         </View>
+        {trailing}
       </View>
       {subtitle && <Label muted>{subtitle}</Label>}
       {children}
@@ -307,6 +309,7 @@ export function Field({
   numeric = false,
   secure = false,
   multiline = false,
+  picker: pickerType,
 }: {
   label: string;
   value: string;
@@ -314,11 +317,19 @@ export function Field({
   numeric?: boolean;
   secure?: boolean;
   multiline?: boolean;
+  picker?: "date" | "time" | "datetime";
 }) {
   const t = useTheme();
   const [picker, setPicker] = useState<"date" | "time" | null>(null);
-  const hasDate = label.includes("YYYY-MM-DD"),
-    hasTime = label.includes("HH:mm") || label.includes("THH:mm");
+  const hasDate =
+      pickerType === "date" ||
+      pickerType === "datetime" ||
+      label.includes("YYYY-MM-DD"),
+    hasTime =
+      pickerType === "time" ||
+      pickerType === "datetime" ||
+      label.includes("HH:mm") ||
+      label.includes("THH:mm");
   const parsed = new Date(value);
   const chosen = Number.isFinite(parsed.getTime()) ? parsed : new Date();
   if (!hasDate && /^\d{2}:\d{2}$/.test(value)) {

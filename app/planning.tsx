@@ -1,1 +1,4 @@
-export { PlanningScreen as default } from "../src/features/planning/PlanningHub";
+import { Redirect } from "expo-router";
+export default function LegacyPlanning() {
+  return <Redirect href="/plan" />;
+}

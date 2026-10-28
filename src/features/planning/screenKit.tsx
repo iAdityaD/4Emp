@@ -4,6 +4,7 @@ import { dateKey, localDate } from "../../domain/shift";
 import { PlanKind } from "../../repositories/PlanningRepository";
 import { Button, Card, Label, Page, Row } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
+import { IconButton } from "../design/primitives";
 import { Money, Progress } from "./components";
 export const monthName = (key: string) =>
   localDate(key + "-01").toLocaleDateString([], {
@@ -57,14 +58,17 @@ export function PlanList({
 }) {
   const nav = useNav();
   return (
-    <Page title={title} subtitle={description}>
-      <Button
-        title="＋ Add new"
-        onPress={() => nav.navigate("PlanEdit", { kind })}
-      />
-      {!rows.length && (
-        <Empty text="No records yet. Add one with your own amount and schedule." />
-      )}
+    <Page
+      title={title}
+      trailing={
+        <IconButton
+          icon="add"
+          label={`New ${title.toLowerCase()}`}
+          onPress={() => nav.navigate("PlanEdit", { kind })}
+        />
+      }
+    >
+      {!rows.length && <Empty text="No records yet" />}
       {rows.map((r) => (
         <Pressable
           key={r.id}

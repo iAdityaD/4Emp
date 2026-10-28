@@ -1,11 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
-import { parseAmount } from "../../domain/finance";
-import { Transaction } from "../../domain/models";
-import { dateKey, formTime } from "../../domain/shift";
+import { dateKey } from "../../domain/shift";
 import { TransactionRepository } from "../../repositories/TransactionRepository";
+import { useActivityFilters } from "../../state/activity";
 import { useStore } from "../../state/store";
 import {
   act,
@@ -19,48 +19,195 @@ import {
   useTheme,
 } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
-import { AccountChoice, CategoryChoice, Money, Toggle } from "./components";
-import { Empty, MonthPicker } from "./screenKit";
+import { IconButton, InfoButton, MenuRow, Section } from "../design/primitives";
+import { openField } from "../editor/Screens";
+import { formatField, recordFor, transactionFields } from "../editor/model";
+import { Money, Toggle } from "./components";
+import { Empty, monthName, MonthPicker } from "./screenKit";
 export function AdvancedTransactionsScreen() {
   const s = useStore(),
     nav = useNav(),
-    t = useTheme();
+    t = useTheme(),
+    router = useRouter();
   const [type, setType] = useState("ALL"),
     [search, setSearch] = useState(""),
-    [account, setAccount] = useState(""),
-    [month, setMonth] = useState(dateKey().slice(0, 7)),
-    [allDates, setAllDates] = useState(false);
+    [searching, setSearching] = useState(false);
+  const filters = useActivityFilters();
   const rows = s.transactions.filter(
     (x) =>
       (type === "ALL" || x.type === type) &&
-      (!account ||
-        x.account_id === account ||
-        x.destination_account_id === account) &&
-      (allDates || dateKey(Date.parse(x.transaction_date)).startsWith(month)) &&
+      (!filters.account ||
+        x.account_id === filters.account ||
+        x.destination_account_id === filters.account) &&
+      (filters.allDates ||
+        dateKey(Date.parse(x.transaction_date)).startsWith(filters.month)) &&
       `${x.note ?? ""} ${s.categories.find((c) => c.id === x.category_id)?.name ?? ""} ${x.tags}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
   return (
-    <Page title="Transactions" scroll={false}>
-      <Row>
-        <Button title="＋ Entry" onPress={() => nav.navigate("QuickEntry")} />
-        <Button
-          title="Transfer"
-          secondary
-          onPress={() => nav.navigate("Transfer")}
-        />
-      </Row>
-      <Field
-        label="Search notes, tags or category"
-        value={search}
-        onChange={setSearch}
-      />
+    <Page
+      title="Activity"
+      scroll={false}
+      trailing={
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          <IconButton
+            icon="search-outline"
+            label="Search transactions"
+            onPress={() => setSearching((x) => !x)}
+          />
+          <IconButton
+            icon="options-outline"
+            label="Filter transactions"
+            onPress={() => router.push("/activity-filters")}
+          />
+          <IconButton
+            icon="add"
+            label="New entry"
+            filled
+            onPress={() => nav.navigate("QuickEntry")}
+          />
+        </View>
+      }
+    >
+      {searching && (
+        <Field label="Search" value={search} onChange={setSearch} />
+      )}
       <Chips
-        values={["ALL", "INCOME", "EXPENSE", "TRANSFER"]}
+        values={["ALL", "EXPENSE", "INCOME", "TRANSFER"]}
+        labels={{
+          ALL: "All",
+          EXPENSE: "Expenses",
+          INCOME: "Income",
+          TRANSFER: "Transfers",
+        }}
         value={type}
         onChange={setType}
       />
+      <Row>
+        <Label muted size={12}>
+          {filters.allDates ? "All dates" : monthName(filters.month)}
+          {filters.account
+            ? " · " + s.accounts.find((a) => a.id === filters.account)?.name
+            : ""}
+        </Label>
+        <Label muted size={11}>
+          {rows.length} {rows.length === 1 ? "entry" : "entries"}
+        </Label>
+      </Row>
+      <View style={{ flex: 1, minHeight: 100 }}>
+        <FlashList
+          data={rows}
+          estimatedItemSize={83}
+          keyExtractor={(x) => x.id}
+          ListEmptyComponent={<Empty text="No entries" />}
+          renderItem={({ item: x }) => {
+            const category = s.categories.find((c) => c.id === x.category_id),
+              color =
+                x.type === "INCOME"
+                  ? t.success
+                  : x.type === "TRANSFER"
+                    ? t.cyan
+                    : (category?.color_hex ?? t.danger);
+            return (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => nav.navigate("TransactionDetails", { id: x.id })}
+                style={{
+                  paddingVertical: 15,
+                  borderBottomWidth: 1,
+                  borderColor: t.line,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 14,
+                      backgroundColor: color + "18",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons
+                      name={
+                        (x.type === "TRANSFER"
+                          ? "swap-horizontal-outline"
+                          : (category?.icon_name ??
+                            (x.type === "INCOME"
+                              ? "arrow-down-outline"
+                              : "receipt-outline"))) as React.ComponentProps<
+                          typeof Ionicons
+                        >["name"]
+                      }
+                      size={21}
+                      color={color}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Label weight>{x.note || category?.name || x.type}</Label>
+                    <Label muted size={11}>
+                      {new Date(x.transaction_date).toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      ·{" "}
+                      {
+                        [...s.accounts, ...s.archivedAccounts].find(
+                          (a) => a.id === x.account_id,
+                        )?.name
+                      }
+                    </Label>
+                  </View>
+                  <Money
+                    minor={
+                      x.type === "INCOME" ? x.amount_minor : -x.amount_minor
+                    }
+                    color={x.type === "INCOME" ? t.success : t.text}
+                  />
+                </View>
+              </Pressable>
+            );
+          }}
+        />
+      </View>
+    </Page>
+  );
+}
+export function ActivityFiltersScreen() {
+  const s = useStore(),
+    filters = useActivityFilters(),
+    router = useRouter();
+  const [account, setAccount] = useState(filters.account),
+    [month, setMonth] = useState(filters.month),
+    [allDates, setAllDates] = useState(filters.allDates);
+  return (
+    <Page
+      title="Filter activity"
+      trailing={
+        <IconButton
+          icon="refresh-outline"
+          label="Reset filters"
+          onPress={() => {
+            setAccount("");
+            setMonth(dateKey().slice(0, 7));
+            setAllDates(false);
+          }}
+        />
+      }
+    >
+      <Card>
+        <Toggle label="All dates" value={allDates} onChange={setAllDates} />
+        {!allDates && <MonthPicker month={month} onChange={setMonth} />}
+      </Card>
+      <Section title="Account" />
       <Chips
         values={["", ...s.accounts.map((a) => a.id)]}
         labels={{
@@ -70,202 +217,137 @@ export function AdvancedTransactionsScreen() {
         value={account}
         onChange={setAccount}
       />
-      <Row>
-        <Button
-          title={allDates ? "All dates" : "Choose all dates"}
-          secondary
-          onPress={() => setAllDates((v) => !v)}
-        />
-        <Label muted>{rows.length} entries</Label>
-      </Row>
-      {!allDates && <MonthPicker month={month} onChange={setMonth} />}
-      <View style={{ flex: 1, minHeight: 120 }}>
-        <FlashList
-          data={rows}
-          estimatedItemSize={83}
-          keyExtractor={(x) => x.id}
-          ListEmptyComponent={
-            <Empty text="No matching entries. Record your first transaction or change the filters." />
-          }
-          renderItem={({ item: x }) => (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => nav.navigate("TransactionDetails", { id: x.id })}
-              style={{
-                paddingVertical: 14,
-                borderBottomColor: t.line,
-                borderBottomWidth: 1,
-              }}
-            >
-              <Row>
-                <View style={{ flex: 1 }}>
-                  <Label weight>
-                    {x.note ||
-                      s.categories.find((c) => c.id === x.category_id)?.name ||
-                      x.type}
-                  </Label>
-                  <Label muted size={11}>
-                    {dateKey(Date.parse(x.transaction_date))} ·{" "}
-                    {s.accounts.find((a) => a.id === x.account_id)?.name}
-                    {x.type === "TRANSFER"
-                      ? " → " +
-                        s.accounts.find(
-                          (a) => a.id === x.destination_account_id,
-                        )?.name
-                      : ""}
-                  </Label>
-                </View>
-                <Money
-                  minor={x.type === "INCOME" ? x.amount_minor : -x.amount_minor}
-                  color={
-                    x.type === "INCOME"
-                      ? t.success
-                      : x.type === "TRANSFER"
-                        ? t.cyan
-                        : t.danger
-                  }
-                />
-              </Row>
-            </Pressable>
-          )}
-        />
-      </View>
+      <Button
+        title="Apply"
+        icon="checkmark"
+        onPress={() => {
+          filters.set({ account, month, allDates });
+          router.back();
+        }}
+      />
     </Page>
   );
 }
 export function TransactionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(),
     s = useStore(),
-    nav = useNav();
+    router = useRouter(),
+    nav = useNav(),
+    t = useTheme();
   const tx = s.transactions.find((x) => x.id === id);
-  const [amount, setAmount] = useState(String(tx?.amount ?? "")),
-    [account, setAccount] = useState(tx?.account_id ?? ""),
-    [destination, setDestination] = useState(tx?.destination_account_id ?? ""),
-    [category, setCategory] = useState(tx?.category_id ?? ""),
-    [type, setType] = useState<Transaction["type"]>(tx?.type ?? "EXPENSE"),
-    [note, setNote] = useState(tx?.note ?? ""),
-    [date, setDate] = useState(tx ? formTime(tx.transaction_date) : ""),
-    [tags, setTags] = useState(
-      tx ? (JSON.parse(tx.tags) as string[]).join(", ") : "",
-    ),
-    [reimb, setReimb] = useState(!!tx?.is_reimbursable);
   if (!tx)
     return (
       <Page title="Entry unavailable">
-        <Label>This entry has been reversed.</Label>
+        <Label muted>Entry removed</Label>
       </Page>
     );
-  const editable =
-    tx.ledger_kind === "PERSONAL" &&
-    tx.reimbursement_status !== "SETTLED" &&
-    !tx.is_split &&
-    !s.contributions.some((c) => c.transaction_id === tx.id);
+  const locked =
+    tx.ledger_kind !== "PERSONAL" ||
+    tx.reimbursement_status === "SETTLED" ||
+    !!tx.is_split ||
+    s.contributions.some((c) => c.transaction_id === id);
+  const record = recordFor("transaction", id)!;
+  const fields = transactionFields.filter(
+    (f) =>
+      (f.key !== "destination_account_id" || tx.type === "TRANSFER") &&
+      (f.key !== "is_reimbursable" || tx.type === "EXPENSE") &&
+      f.key !== "amount_minor",
+  );
   return (
     <Page
-      title="Transaction details"
-      subtitle={
-        editable
-          ? "Edit a record. Balances and analytics update together."
-          : "A linked or settled record. Reverse it to undo its financial effect."
-      }
-    >
-      <Card>
-        <Money minor={tx.amount_minor} large />
-        <Label>
-          {tx.ledger_kind} · {tx.reimbursement_status.replaceAll("_", " ")}
-        </Label>
-        {editable && (
-          <>
-            <Chips
-              values={["EXPENSE", "INCOME", "TRANSFER"] as const}
-              value={type}
-              onChange={(v) => {
-                setType(v);
-                setCategory("");
-              }}
-            />
-            <Field label="Amount" value={amount} onChange={setAmount} numeric />
-            <Label muted>Account</Label>
-            <AccountChoice value={account} onChange={setAccount} />
-            {type === "TRANSFER" ? (
-              <>
-                <Label muted>Destination</Label>
-                <AccountChoice value={destination} onChange={setDestination} />
-              </>
-            ) : (
-              <CategoryChoice
-                kind={type}
-                value={category}
-                onChange={setCategory}
-              />
-            )}
-            <Field
-              label="Date and time · YYYY-MM-DDTHH:mm"
-              value={date}
-              onChange={setDate}
-            />
-            <Field label="Note" value={note} onChange={setNote} />
-            <Field
-              label="Tags (comma-separated)"
-              value={tags}
-              onChange={setTags}
-            />
-            {type === "EXPENSE" && (
-              <Toggle
-                label="Employer reimbursable"
-                value={reimb}
-                onChange={setReimb}
-              />
-            )}
-            <Button
-              title="Save changes"
-              onPress={() =>
-                void act(
-                  () =>
-                    TransactionRepository.edit(id, {
-                      accountId: account,
-                      destinationId: destination,
-                      type,
-                      amount: parseAmount(amount),
-                      categoryId:
-                        type === "TRANSFER" ? undefined : category || undefined,
-                      date,
-                      note,
-                      tags: tags
-                        .split(",")
-                        .map((x) => x.trim())
-                        .filter(Boolean),
-                      reimbursable: type === "EXPENSE" && reimb,
-                    }),
-                  () => nav.goBack(),
-                )
-              }
-            />
-          </>
-        )}
-        <Button
-          secondary
-          title="Delete / reverse entry"
-          onPress={() =>
-            Alert.alert(
-              "Reverse this entry?",
-              "Its balance effect is removed. A linked EMI or subscription becomes unpaid. Recurring identities stay recorded to prevent automatic reposting. Archived accounts affected by the reversal are reopened so their balances stay visible.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Reverse",
-                  style: "destructive",
-                  onPress: () =>
-                    void act(
-                      () => TransactionRepository.remove(id),
-                      () => nav.goBack(),
-                    ),
-                },
-              ],
-            )
+      title="Transaction"
+      trailing={
+        <InfoButton
+          title="Transaction"
+          text={
+            locked
+              ? "This payment is linked. Reverse it to undo its effect."
+              : "Tap a value to edit it. Reversing an entry removes its balance effect while keeping the audit record."
           }
         />
+      }
+    >
+      <View style={{ alignItems: "center", gap: 12, paddingVertical: 18 }}>
+        <View
+          style={{
+            backgroundColor:
+              (tx.type === "INCOME" ? t.success : t.danger) + "18",
+            padding: 20,
+            borderRadius: 26,
+          }}
+        >
+          <Ionicons
+            name={
+              tx.type === "TRANSFER"
+                ? "swap-horizontal"
+                : tx.type === "INCOME"
+                  ? "arrow-down"
+                  : "arrow-up"
+            }
+            size={30}
+            color={tx.type === "INCOME" ? t.success : t.danger}
+          />
+        </View>
+        <Pressable
+          disabled={locked}
+          accessibilityLabel="Edit amount"
+          onPress={() => openField(router, "transaction", "amount_minor", id)}
+        >
+          <Money minor={tx.amount_minor} large />
+        </Pressable>
+        <Label muted size={12}>
+          {tx.reimbursement_status === "PENDING"
+            ? "Claim pending"
+            : tx.ledger_kind === "COMMITMENT"
+              ? "Bill payment"
+              : tx.type.charAt(0) + tx.type.slice(1).toLowerCase()}
+        </Label>
+      </View>
+      <Card>
+        {fields.map((f) => (
+          <MenuRow
+            key={f.key}
+            title={f.label}
+            icon={f.icon}
+            value={formatField(f, record[f.key])}
+            onPress={() => {
+              if (!locked) openField(router, "transaction", f.key, id);
+            }}
+            trailing={
+              locked ? (
+                <Ionicons
+                  name="lock-closed-outline"
+                  color={t.muted}
+                  size={14}
+                />
+              ) : undefined
+            }
+          />
+        ))}
       </Card>
+      <Button
+        title="Reverse entry"
+        icon="trash-outline"
+        secondary
+        onPress={() =>
+          Alert.alert(
+            "Reverse entry?",
+            "Its balance effect will be undone. Linked due items reopen.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Reverse",
+                style: "destructive",
+                onPress: () =>
+                  void act(
+                    () => TransactionRepository.remove(id),
+                    () => nav.goBack(),
+                  ),
+              },
+            ],
+          )
+        }
+      />
     </Page>
   );
 }

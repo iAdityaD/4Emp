@@ -1,6 +1,6 @@
-import React from "react";
-import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
+import React from "react";
 import { useTheme } from "../../src/ui/kit";
 export default function TabsLayout() {
   const t = useTheme();
@@ -23,10 +23,10 @@ export default function TabsLayout() {
       {(
         [
           ["index", "Home", "home-outline"],
-          ["transactions", "Transactions", "swap-horizontal-outline"],
+          ["transactions", "Activity", "swap-horizontal-outline"],
           ["work", "Work", "time-outline"],
-          ["insights", "Insights", "bar-chart-outline"],
-          ["more", "More", "grid-outline"],
+          ["plan", "Plan", "grid-outline"],
+          ["more", "Settings", "settings-outline"],
         ] as const
       ).map(([name, title, icon]) => (
         <Tabs.Screen
