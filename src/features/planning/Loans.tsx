@@ -168,7 +168,11 @@ export function RecordPaymentScreen() {
             ? emi?.amount_minor
             : sub?.amount_minor;
   const [account, setAccount] = useState(
-    (kind === "EMI" ? loan?.account_id : sub?.account_id) ??
+    (kind === "BILL"
+      ? bill?.account_id
+      : kind === "EMI"
+        ? loan?.account_id
+        : sub?.account_id) ??
       s.accounts[0]?.id ??
       "",
   );
@@ -190,7 +194,7 @@ export function RecordPaymentScreen() {
       <Section title={kind === "CLAIM" ? "Credit to" : "Pay from"} />
       <AccountChoice value={account} onChange={setAccount} />
       <Button
-        title="Record payment"
+        title={kind === "CLAIM" ? "Mark settled" : "Record payment"}
         icon="checkmark"
         onPress={() =>
           void act(

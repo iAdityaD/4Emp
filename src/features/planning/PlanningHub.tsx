@@ -137,16 +137,14 @@ export function PlanningScreen() {
           },
         ]}
       />
-      {s.commitments.length > 0 && (
-        <Card>
-          <MenuRow
-            title="Monthly bills"
-            icon="receipt-outline"
-            value={String(s.commitments.length)}
-            onPress={() => nav.navigate("Commitments")}
-          />
-        </Card>
-      )}
+      <Card>
+        <MenuRow
+          title="Monthly bills"
+          icon="receipt-outline"
+          value={String(s.commitments.length)}
+          onPress={() => nav.navigate("Commitments")}
+        />
+      </Card>
     </Page>
   );
 }

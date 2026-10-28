@@ -43,7 +43,7 @@ try:
  # The editable field carries the same accessible name as the heading; target EditText.
  node=next(n for n in dump().iter('node') if n.get('class')=='android.widget.EditText')
  nums=list(map(int,re.findall(r'\d+',node.get('bounds'))));adb('shell','input','tap',(nums[0]+nums[2])//2,(nums[1]+nums[3])//2)
- adb('shell','input','text','QA%spets');adb('shell','input','keyevent','KEYCODE_BACK');tap('Continue')
+ adb('shell','input','text','QA%spets');tap('Continue')
  wait('Type');tap('Expense');tap('Continue');wait('Icon');tap('Continue');wait('Color');tap('Choose color #3B82F6');tap('Continue');wait('Review');shot('19-creation-review');tap('Create');wait('Categories');wait('QA pets');shot('20-custom-category')
  adb('shell','cmd','uimode','night','yes');deep('');wait('TOTAL BALANCE');shot('21-dashboard-dark')
  logs=adb('logcat','-d').decode(errors='replace');(out/'logcat.txt').write_text(logs)

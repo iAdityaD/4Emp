@@ -1,3 +1,4 @@
+import { userMessage } from "../../domain/errors";
 import { Ionicons } from "@expo/vector-icons";
 import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -235,7 +236,7 @@ export function FocusedEditScreen() {
           if (entity === "entry") {
             void saveField(entity, p.id, spec, value, p.kind)
               .then(() => router.back())
-              .catch((e) => Alert.alert("Check value", String(e)));
+              .catch((e) => Alert.alert("Check value", userMessage(e)));
           } else
             void act(
               () =>
@@ -666,10 +667,7 @@ export function SetupScreen() {
                       },
                     } as Href);
               } catch (e) {
-                Alert.alert(
-                  "Check value",
-                  e instanceof Error ? e.message : "Invalid value",
-                );
+                Alert.alert("Check value", userMessage(e));
               }
             }}
           />

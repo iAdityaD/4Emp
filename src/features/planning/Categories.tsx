@@ -6,20 +6,6 @@ import { useNav } from "../../ui/navigation";
 import { IconButton } from "../design/primitives";
 import { RecordSettingsScreen, StartSetup } from "../editor/Screens";
 import { Tile, Toggle } from "./components";
-const icons = [
-  "restaurant-outline",
-  "car-outline",
-  "bag-outline",
-  "home-outline",
-  "flash-outline",
-  "heart-outline",
-  "film-outline",
-  "school-outline",
-  "person-outline",
-  "airplane-outline",
-  "briefcase-outline",
-  "cash-outline",
-];
 export function CategoriesScreen() {
   const s = useStore(),
     nav = useNav();

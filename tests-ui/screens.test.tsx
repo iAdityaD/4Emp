@@ -1,3 +1,6 @@
+import { RecordPaymentScreen } from "../src/features/planning/Loans";
+import type { Account } from "../src/domain/models";
+import { PlanningScreen } from "../src/features/planning/PlanningHub";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { fireEvent, render } from "@testing-library/react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -160,4 +163,37 @@ it("budgets show an empty state without example limits", () => {
   const s = render(<BudgetsScreen />);
   expect(s.queryByText("₹5,000")).toBeNull();
   expect(s.getByText("No budgets this month")).toBeTruthy();
+});
+
+it("Plan exposes monthly bill creation even before a bill exists", () => {
+  const s = render(<PlanningScreen />);
+  expect(s.getByLabelText("Monthly bills")).toBeTruthy();
+});
+
+it("monthly bill payments default to the configured funding account", () => {
+  useStore.setState({
+    accounts: [
+      { id: "a", name: "Primary" },
+      { id: "b", name: "Bill bank" },
+    ] as Account[],
+    commitments: [
+      {
+        id: "rent",
+        title: "Rent",
+        amount: 100,
+        due_day_of_month: 1,
+        account_id: "b",
+        commitment_type: "RENT",
+        is_active: 1,
+      },
+    ],
+  });
+  jest
+    .mocked(useLocalSearchParams)
+    .mockReturnValue({ kind: "BILL", id: "rent" });
+  const s = render(<RecordPaymentScreen />);
+  expect(
+    s.getByRole("button", { name: "Bill bank" }).props.accessibilityState
+      .selected,
+  ).toBe(true);
 });

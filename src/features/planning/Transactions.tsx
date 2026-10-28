@@ -54,7 +54,10 @@ export function AdvancedTransactionsScreen() {
           <IconButton
             icon="search-outline"
             label="Search transactions"
-            onPress={() => setSearching((x) => !x)}
+            onPress={() => {
+              setSearching((x) => !x);
+              if (searching) setSearch("");
+            }}
           />
           <IconButton
             icon="options-outline"
@@ -88,7 +91,10 @@ export function AdvancedTransactionsScreen() {
         <Label muted size={12}>
           {filters.allDates ? "All dates" : monthName(filters.month)}
           {filters.account
-            ? " · " + s.accounts.find((a) => a.id === filters.account)?.name
+            ? " · " +
+              [...s.accounts, ...s.archivedAccounts].find(
+                (a) => a.id === filters.account,
+              )?.name
             : ""}
         </Label>
         <Label muted size={11}>
