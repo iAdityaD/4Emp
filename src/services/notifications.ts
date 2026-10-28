@@ -28,9 +28,13 @@ export function syncNotifications(plan: PlannedAlarm[]) {
       if (!(await Notifications.getPermissionsAsync()).granted)
         return "Notification permission is off";
       if (Platform.OS === "android" && !(await exactAccess()))
-        return "Allow Alarms & reminders in Settings for shift alerts";
+        return "Allow Alarms & reminders in Settings for scheduled alerts";
       await Notifications.setNotificationChannelAsync("work", {
         name: "Work reminders",
+        importance: Notifications.AndroidImportance.HIGH,
+      });
+      await Notifications.setNotificationChannelAsync("finance", {
+        name: "Finance reminders",
         importance: Notifications.AndroidImportance.HIGH,
       });
       for (const alarm of plan)
@@ -46,7 +50,7 @@ export function syncNotifications(plan: PlannedAlarm[]) {
             trigger: {
               type: Notifications.SchedulableTriggerInputTypes.DATE,
               date: new Date(alarm.at),
-              channelId: "work",
+              channelId: alarm.channel ?? "work",
             },
           });
       return null;

@@ -1,59 +1,55 @@
-# 4Employee
+# 4emp · Personal money & work
 
-An offline personal cockpit for work attendance and a manual three-wallet ledger. The existing 4Emp repository is now an Expo SDK 53 / React Native TypeScript project. The original native Android app is preserved under `legacy/android`.
+A local-first Android app built with Expo SDK 53, React Native, Expo Router, strict TypeScript, Zustand, Zod and SQLite. No backend, bank integration, login, telemetry or sample transactions. Existing 4Employee records migrate in place. The original Java app is preserved in `legacy/android`.
 
-## What is implemented
+## Daily experience
 
-- Five tabs: Shift, Calendar, Ledger, Analytics, and Settings, with dedicated stack/modal routes for every requested sub-flow.
-- Gross/net tracking, timestamp-derived countdown/progress, 0/3/5/10-minute buffers, reset cutoffs, safe arrival, office/WFH/half-day/custom/open-ended shifts, break records, manual corrections, and unclosed-shift review.
-- Native scheduled T−15, target, and T+60 reminders. Net breaks defer work alerts until the break ends. WFH removes turnstile reminders; open-ended mode has no mandatory target alarm. Android has a native cutoff receiver that persists `NEEDS_REVIEW` independently of JavaScript and restores cutoff alarms after reboot. On all platforms, timestamp-based cutoff reconciliation runs on launch/resume.
-- Seven-day calendar logging without weekday restrictions, weekly totals, office-day target, leave marks, optional/mandatory holidays, monthly reports, and day-detail sheets. Weekend markings are configurable. Leave/non-working/mandatory holiday dates mute notifications.
-- Independent salary bank, spends bank, and cash accounts; manual income/expense entries; atomic transfers; notes, tags, dates and categories; audited balance correction; reimbursable expenses with idempotent settlement into a chosen account.
-- EMI/subscription/rent registry, end-of-month snapping, one payment per cycle, safe daily spend, upcoming obligations, monthly expense donut, and sorted ledger lists.
-- Nullable split fields and share-aware repository calculations. **Peer splitting remains the explicitly requested Coming Soon route**; it does not upload contacts or pretend to collect money.
-- Adaptive OLED dark/light theme, SVG ring, haptics, Reanimated interactions, bottom sheets, FlashList, biometric lock, Android screenshot protection, authenticated encrypted JSON backups, atomic restore, and formula-safe CSV exports.
+The reference-inspired interface uses warm light surfaces, an OLED dark theme, a teal balance card, clear income/expense colors, SVG charts and a circular shift timer. The five primary tabs are Home, Transactions, Work, Insights and More. Dedicated routes cover account/category editors, transaction corrections, salary and recurring rules, loan details and amortization, subscription renewals, monthly budgets, savings goals and contributions, finance calendar, due-item details, reminder configuration, work profiles, weekly targets, manual logs, break corrections, holiday/calendar reports, security and backup.
 
-No bank login, scraping, server, telemetry, cloud sync, or employer reporting is implemented. Money moves only when you record it. Corporate reimbursements are excluded from personal spending; settlement credits are excluded from personal income. Receivables are not included in liquid balances. Transfers and manual corrections are excluded from expense analytics.
+Financial screens start with your actual data. Starter accounts/categories and work defaults are editable. Add unlimited bank/cash/wallet accounts, custom category icons/colors, any three-letter currency display code, an accent color, your own work durations and billing schedules. Currency changes do not convert money. Date/time fields support native pickers as well as manual input.
 
-## Run and build
+## Finance engine
 
-Use Node 24 and Java 17. Android Studio / Android SDK are required for a local Android build.
+- Transactions support income, expenses, transfers, search, account/type/date filters, edits and reversals. Reversed entries retain an audit record. Balances derive from integer opening paise plus non-voided ledger entries; no independently maintained balance column exists.
+- Salary rules support net amount, payday 1–31, account/category, start date, lead-time reminders, pause and optional auto-posting. Recurring income/expense/transfer rules support day/week/month/year intervals.
+- Posting catches up **when the app is opened or resumed**; it does not invent background bank transactions. Each rule/date occurrence and its ledger entry commit atomically. Unique database identities prevent duplicates and survive reversing an entry, so reopening cannot recreate deleted salary. Changing a posted schedule requires a new rule; its amount and metadata remain editable.
+- Loans use integer principal/interest installments and a reducing-balance schedule. Suggested EMI is available. Final installment rounding preserves principal exactly. Recording a payment debits the selected account once; reversing its ledger entry marks it unpaid. Paid loan terms require a new/refinanced loan to change the amortization assumptions. Loan creation does not imply a bank deposit.
+- Subscriptions support arbitrary intervals, anchored month-end recurrence, due dates, local alerts, payment history, pausing and one payment per renewal.
+- Monthly category budgets have editable limits and alert thresholds. Personal spending excludes transfers, reconciliation and employer-reimbursable expenses. Alerts are delivered once per threshold/month.
+- Savings goals track targets, optional deadlines, reservations and releases. Reserving money is an envelope allocation, not an expense. Optional linked transfers move actual liquidity between accounts. Reversing a linked transfer removes its allocation.
+- Safe-to-spend subtracts active goal reservations and unpaid obligations through the configured cycle end, then divides by remaining cycle days. Overdue obligations remain reserved. Transfers and expected future income do not inflate this value. Negative amounts show a shortfall.
+- Corporate reimbursement settlement is atomic and idempotent, credits the chosen account, and is excluded from personal income. Split models remain forward-compatible; peer splitting is still explicitly Coming Soon.
+
+## Work engine
+
+Gross tracking includes breaks; net tracking deducts their timestamp duration. Targets, buffers and cutoff are saved per shift. Office, WFH, half-day, custom and open-ended modes remain available. Half-day halves the baseline; open-ended counts upward without mandatory-target alerts. WFH suppresses turnstile alerts.
+
+Configure default or seven separate weekday targets, rest days, preferred start, reset cutoff, arbitrary 0–60-minute buffer, advance-warning minutes and overtime reminder offset. Saved work profiles apply reusable defaults. Manual past logs and break corrections reject overlaps and invalid ranges. Calendar logging accepts all seven days, leave, non-working days and holidays. Unclosed shifts lock to review at the saved cutoff via the native Android receiver; launch/resume also reconciles timestamps. UI animation never acts as a persisted timer.
+
+## Persistence & privacy
+
+Migrations 1–2 preserve the previous schema. Migration 3 converts existing money to integer paise and derives the required opening balance from existing liquidity and ledger history. It rebuilds the accounts table transactionally, checks all actual foreign keys, and clears SQLite's stale deferred deletion counter before commit. Migration 4 adds planning and work-profile tables, occurrence uniqueness, indexes and relationship constraints. Every native exclusive connection enables foreign keys and busy timeout **before** `BEGIN IMMEDIATE` (these pragmas are connection-local).
+
+Repositories, deterministic calculations, scheduling, backup and independent feature screens are separated under `src`. SQLite is the financial source of truth. Amounts exposed in rupees for legacy UI compatibility are read-only SQL view projections; stored money is integer paise.
+
+Portable backups use AES-256-GCM and PBKDF2-SHA256 with a user passphrase. Imports authenticate, validate schema/relationships/settings/integer money, and replace data atomically. Previous-format backups migrate in an isolated temporary SQLite database first. Device-only encrypted snapshots use a separate random AES key in Expo SecureStore; they do not survive uninstall and are not a substitute for a portable export. CSV is intentionally plaintext. Biometric/device authentication protects UI access, not database-at-rest encryption. Android screenshots are blocked while lock is enabled.
+
+Local alerts require notification permission and Android Alarms & reminders access. Finance/work alerts have separate switches and OS channels. One year of due dates is stored for calendar use. OS requests are bounded to 60: active-shift alarms first, up to 30 finance alerts, then recurring break reminders from a rolling 28-day window. Reopen regularly to replenish the bounded schedule. Force-stop suspends delivery until reopening. Recurrence is not a background bank feed. Native alarms restore on reboot; timezone changes are reconciled on resume. Missed due dates remain visible as overdue.
+
+## Build & validation
 
 ```sh
 npm ci
 npm run check
 npx expo install --check
+npx expo export --platform android --output-dir dist --max-workers 2
 npx expo prebuild --platform android --clean
-npx expo run:android
-```
-
-To create an APK that works without Metro:
-
-```sh
 cd android
-./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+./gradlew assembleRelease lintRelease -PreactNativeArchitectures=arm64-v8a,x86_64
 ```
 
-GitHub Actions generates the managed project, runs TypeScript/domain/repository checks, builds the bundled Android APK, and runs Android lint. Download **4Employee-preview-apk** from a successful [workflow run](https://github.com/iAdityaD/4Emp/actions/workflows/android.yml). It is an **ARM64 preview build signed with the development key**, not a Play Store production release. A production distribution requires your own stable signing key, device QA, and store configuration. iOS requires macOS/Xcode and has not been device-verified here.
+Use Node 24, Java 17 and an Android SDK. `npm run check` includes strict TypeScript, real SQLite migration/repository/domain tests and Jest + React Native Testing Library interaction tests. Tests cover old-data migration, integer balances, atomic transfers, reimbursement, recurrence identities, leap/month-end dates, amortization, payment reversal, goal allocation, budget alerts, encrypted backup tampering, atomic restore, work timing and correction boundaries.
 
-## Data and migrations
+GitHub Actions builds a bundled APK, runs Android lint, then installs on an Android 35 emulator and exercises onboarding, a real manually entered expense, primary routes and both themes. UI screenshots and logs are attached as `android-ui-screenshots`; emulator QA entries are never included in the shipped APK. Download `4Employee-preview-apk` from the workflow artifacts and unzip it.
 
-`src/db/schema.ts` migration 1 reproduces the requested tables and indexes. Migration 2 adds cutoff snapshots, settlement links/classifications, tags, cycle-payment identities, calendar marks, and an active-session uniqueness constraint. Migrations run transactionally; foreign keys, WAL, and busy timeout are enabled.
-
-Repositories live in `src/repositories`; calculations in `src/domain`; native scheduling/encryption/import services in `src/services`; UI components/screens are separate. Finance calculations use integer minor units in code and round persisted REAL values to two decimals as required by the supplied schema. Changing the currency label does not convert amounts.
-
-The `com.fouremp.app` package ID is preserved. The Android bridge imports existing SharedPreferences shifts, leave/holiday dates, weekend preferences, work targets, and recurring reminders once, within a transaction. **An in-place upgrade must use the same signing key as the installed app.** Installing after an uninstall cannot recover deleted local data. The previous CI debug signing key is not recoverable from the APK.
-
-## Timing and privacy behavior
-
-Shift target, buffer, tracking mode and cutoff are snapshots, so later default-setting edits do not rewrite previous shifts. A shift-detail override changes only that shift. Net mode deducts the actual timestamp duration of breaks. Gross mode does not. UI frame callbacks refresh the display only; all elapsed values derive from persisted timestamps and alarms remain OS-owned.
-
-Notification permission and Android Alarms & reminders access are explicit. If exact access is denied, the UI reports work alerts as unavailable; it does not claim precision. Cutoff locking still has a native fallback and is derived from the saved timestamp. Force-stop suspends delivery until reopening. Generic reminders are scheduled as a rolling 28-day horizon, capped at 60 pending requests for iOS and replenished on launch/resume/edit. Open the app at least once during that horizon to keep recurring reminders populated. Reboot restores Android native scheduled requests. Timezone changes retain active-shift timestamp snapshots; opening the app regenerates local recurring reminder dates.
-
-Biometric lock protects UI access; it does not encrypt the SQLite database at rest. The Android app blocks screenshots when lock is enabled. Backups use AES-256-GCM with random 16-byte salt, 12-byte nonce, and PBKDF2-SHA256 (210,000 iterations). Passwords are not saved and cannot be recovered. Shared export files are removed from app cache after the share sheet returns. CSV is intentionally plaintext and requires a trusted destination.
-
-## Validation and release gate
-
-`npm run check` runs strict TypeScript plus tests against actual SQLite migrations and repository methods (using Node SQLite as the test adapter), shift/money calculations, notification plans, encrypted backup authentication/tampering, and CSV injection handling.
-
-Before calling a distribution production-ready, test on physical Android/iOS devices: reboot/Doze/permission revocation and exact alarm delivery; active net breaks and cutoff recovery; biometrics across background transitions; numpad accessibility and large text; full backup/restore; legacy migration under matching signing; timezone/DST behavior; signing and store compliance. An APK build is not a substitute for this device validation.
+This remains a development-key preview. A data-preserving in-place upgrade requires the same signing key as the installed app; use your stable signing configuration for production. Physical-device alarm/Doze/reboot and biometric QA, accessibility/large-text review and Play Store signing/release are separate release gates. No Play Store deployment or iOS device verification is claimed.

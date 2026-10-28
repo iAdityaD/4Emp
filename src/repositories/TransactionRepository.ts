@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { db, uid } from "../db/connection";
-import { Transaction, Account, Category } from "../domain/models";
+import type { SQLiteDatabase } from "expo-sqlite";
+import { Transaction, Category } from "../domain/models";
 import { cents } from "../domain/finance";
 export interface Entry {
   accountId: string;
@@ -13,118 +15,202 @@ export interface Entry {
   reimbursable?: boolean;
   split?: { total: number; share: number; groupId?: string };
 }
+const entrySchema = z.object({
+  accountId: z.string().min(1),
+  type: z.enum(["EXPENSE", "INCOME", "TRANSFER"]),
+  amount: z.number().finite().positive().max(9e10),
+  note: z.string().max(2000).optional(),
+});
+export async function writeEntry(
+  tx: SQLiteDatabase,
+  e: Entry,
+  id = uid(),
+  kind: Transaction["ledger_kind"] = "PERSONAL",
+) {
+  entrySchema.parse(e);
+  const minor = cents(e.amount);
+  if (minor <= 0) throw Error("Amount must be at least 0.01");
+  if (
+    e.type === "TRANSFER" &&
+    (!e.destinationId || e.destinationId === e.accountId)
+  )
+    throw Error("Choose different source and destination accounts");
+  if (e.type !== "EXPENSE" && (e.reimbursable || e.split))
+    throw Error("Only expenses can be reimbursed or split");
+  if (e.reimbursable && e.split) throw Error("Choose one receivable type");
+  if (
+    e.split &&
+    (cents(e.split.total) !== minor ||
+      !Number.isFinite(e.split.share) ||
+      e.split.share < 0 ||
+      e.split.share > e.amount)
+  )
+    throw Error("Invalid split share");
+  const when = e.date ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(when)) || Date.parse(when) > Date.now())
+    throw Error("Choose a valid date in the past");
+  for (const account of [
+    e.accountId,
+    ...(e.type === "TRANSFER" ? [e.destinationId!] : []),
+  ])
+    if (
+      !(await tx.getFirstAsync(
+        "SELECT id FROM accounts WHERE id=? AND is_active=1",
+        account,
+      ))
+    )
+      throw Error("Account unavailable");
+  if (e.categoryId) {
+    const c = await tx.getFirstAsync<Category>(
+      "SELECT * FROM categories WHERE id=? AND is_active=1",
+      e.categoryId,
+    );
+    if (!c) throw Error("Category unavailable");
+    if (c.kind !== "BOTH" && e.type !== "TRANSFER" && c.kind !== e.type)
+      throw Error("Category does not match transaction type");
+  }
+  await tx.runAsync(
+    `INSERT INTO transactions(id,account_id,destination_account_id,type,amount_minor,category_id,transaction_date,note,is_reimbursable,reimbursement_status,is_split,split_group_id,split_total_minor,split_share_minor,tags,ledger_kind,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    id,
+    e.accountId,
+    e.type === "TRANSFER" ? e.destinationId! : null,
+    e.type,
+    minor,
+    e.categoryId ?? null,
+    new Date(when).toISOString(),
+    e.note ?? null,
+    e.reimbursable ? 1 : 0,
+    e.reimbursable ? "PENDING" : "NOT_APPLICABLE",
+    e.split ? 1 : 0,
+    e.split?.groupId ?? null,
+    e.split ? cents(e.split.total) : null,
+    e.split ? cents(e.split.share) : null,
+    JSON.stringify(e.tags ?? []),
+    kind,
+    Date.now(),
+  );
+  return id;
+}
 export const TransactionRepository = {
   all: () =>
     db().getAllAsync<Transaction>(
-      "SELECT * FROM transactions ORDER BY transaction_date DESC,created_at DESC",
+      "SELECT * FROM ledger ORDER BY transaction_date DESC,created_at DESC",
     ),
   categories: () =>
-    db().getAllAsync<Category>(
-      "SELECT * FROM categories ORDER BY is_system DESC,name",
-    ),
+    db().getAllAsync<Category>("SELECT * FROM categories ORDER BY name"),
   async create(e: Entry) {
-    const amount = cents(e.amount) / 100;
-    if (amount <= 0) throw Error("Amount must be positive");
-    if (
-      e.type === "TRANSFER" &&
-      (!e.destinationId || e.destinationId === e.accountId)
-    )
-      throw Error("Select a different destination account");
-    if (e.type !== "EXPENSE" && (e.reimbursable || e.split))
-      throw Error("Only expenses can be reimbursed or split");
-    if (e.reimbursable && e.split)
-      throw Error("Use one receivable type per transaction");
-    if (
-      e.split &&
-      (cents(e.split.total) !== cents(amount) ||
-        e.split.share < 0 ||
-        e.split.share > amount)
-    )
-      throw Error("Invalid split share");
-    const inputDate = e.date ?? new Date().toISOString();
-    if (!Number.isFinite(Date.parse(inputDate)))
-      throw Error("Enter a valid date");
-    const when = new Date(inputDate).toISOString();
-    if (!Number.isFinite(Date.parse(when)) || Date.parse(when) > Date.now())
-      throw Error("Choose a valid transaction date in the past");
-    const id = uid();
+    let id = "";
     await db().withExclusiveTransactionAsync(async (tx) => {
-      const a = await tx.getFirstAsync<Account>(
-        "SELECT * FROM accounts WHERE id=? AND is_active=1",
-        e.accountId,
+      id = await writeEntry(tx, e);
+    });
+    return id;
+  },
+  async edit(id: string, e: Entry) {
+    await db().withExclusiveTransactionAsync(async (tx) => {
+      const old = await tx.getFirstAsync<Transaction>(
+        "SELECT * FROM ledger WHERE id=?",
+        id,
       );
-      if (!a) throw Error("Account unavailable");
       if (
-        e.type === "TRANSFER" &&
-        !(await tx.getFirstAsync<Account>(
-          "SELECT * FROM accounts WHERE id=? AND is_active=1",
-          e.destinationId!,
+        !old ||
+        old.ledger_kind !== "PERSONAL" ||
+        old.reimbursement_status === "SETTLED" ||
+        old.is_split ||
+        !!(await tx.getFirstAsync(
+          "SELECT id FROM goal_contributions WHERE transaction_id=?",
+          id,
         ))
       )
-        throw Error("Destination unavailable");
+        throw Error(
+          "Linked and settled entries are protected. Reverse them before editing.",
+        );
+      const temp = await writeEntry(tx, e);
       await tx.runAsync(
-        "INSERT INTO transactions(id,account_id,destination_account_id,type,amount,category_id,transaction_date,note,is_reimbursable,reimbursement_status,is_split,split_group_id,split_total_amount,split_my_share,tags,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        id,
+        `UPDATE transactions SET account_id=?,destination_account_id=?,type=?,amount_minor=?,category_id=?,transaction_date=?,note=?,is_reimbursable=?,reimbursement_status=?,tags=? WHERE id=?`,
         e.accountId,
         e.type === "TRANSFER" ? e.destinationId! : null,
         e.type,
-        amount,
+        cents(e.amount),
         e.categoryId ?? null,
-        when,
+        new Date(e.date ?? Date.now()).toISOString(),
         e.note ?? null,
         e.reimbursable ? 1 : 0,
         e.reimbursable ? "PENDING" : "NOT_APPLICABLE",
-        e.split ? 1 : 0,
-        e.split?.groupId ?? null,
-        e.split?.total ?? null,
-        e.split?.share ?? null,
         JSON.stringify(e.tags ?? []),
-        Date.now(),
+        id,
       );
-      const sign = e.type === "INCOME" ? 1 : -1;
-      await tx.runAsync(
-        "UPDATE accounts SET current_balance=ROUND(current_balance+?,2) WHERE id=?",
-        sign * amount,
-        e.accountId,
-      );
-      if (e.type === "TRANSFER")
-        await tx.runAsync(
-          "UPDATE accounts SET current_balance=ROUND(current_balance+?,2) WHERE id=?",
-          amount,
-          e.destinationId!,
-        );
+      await tx.runAsync("DELETE FROM transactions WHERE id=?", temp);
     });
-    return id;
+  },
+  async remove(id: string) {
+    await db().withExclusiveTransactionAsync(async (tx) => {
+      const old = await tx.getFirstAsync<Transaction>(
+        "SELECT * FROM ledger WHERE id=?",
+        id,
+      );
+      if (!old) throw Error("Entry unavailable");
+      if (old.ledger_kind === "REIMBURSEMENT") {
+        await tx.runAsync(
+          "UPDATE transactions SET reimbursement_status='PENDING' WHERE id=?",
+          old.linked_transaction_id!,
+        );
+        await tx.runAsync(
+          "UPDATE transactions SET linked_transaction_id=NULL WHERE id=?",
+          id,
+        );
+      }
+      await tx.runAsync(
+        "UPDATE transactions SET voided_at=?,linked_transaction_id=NULL WHERE linked_transaction_id=? AND ledger_kind='REIMBURSEMENT'",
+        Date.now(),
+        id,
+      );
+      await tx.runAsync(
+        "UPDATE transactions SET voided_at=? WHERE id=?",
+        Date.now(),
+        id,
+      );
+      await tx.runAsync(
+        "UPDATE emi_payments SET status='PENDING',transaction_id=NULL WHERE transaction_id=?",
+        id,
+      );
+      await tx.runAsync(
+        "DELETE FROM subscription_payments WHERE transaction_id=?",
+        id,
+      );
+      await tx.runAsync(
+        "DELETE FROM commitment_payments WHERE transaction_id=?",
+        id,
+      );
+      await tx.runAsync(
+        "DELETE FROM goal_contributions WHERE transaction_id=?",
+        id,
+      );
+      // Keep occurrence identities when reversing salary/recurring entries: reopen must never regenerate deleted income.
+    });
   },
   async settle(id: string, accountId: string) {
     await db().withExclusiveTransactionAsync(async (tx) => {
       const t = await tx.getFirstAsync<Transaction>(
-        "SELECT * FROM transactions WHERE id=?",
+        "SELECT * FROM ledger WHERE id=?",
         id,
       );
       if (!t || t.reimbursement_status !== "PENDING")
-        throw Error("This reimbursement is already settled or unavailable");
-      if (
-        !(await tx.getFirstAsync(
-          "SELECT id FROM accounts WHERE id=? AND is_active=1",
+        throw Error("Already settled or unavailable");
+      const sid = await writeEntry(
+        tx,
+        {
           accountId,
-        ))
-      )
-        throw Error("Account unavailable");
-      await tx.runAsync(
-        "INSERT INTO transactions(id,account_id,type,amount,transaction_date,note,reimbursement_status,ledger_kind,linked_transaction_id,created_at) VALUES(?,?,'INCOME',?,?,?,'NOT_APPLICABLE','REIMBURSEMENT',?,?)",
+          type: "INCOME",
+          amount: t.amount,
+          note: "Employer reimbursement",
+        },
         uid(),
-        accountId,
-        t.amount,
-        new Date().toISOString(),
-        "Employer reimbursement",
-        id,
-        Date.now(),
+        "REIMBURSEMENT",
       );
       await tx.runAsync(
-        "UPDATE accounts SET current_balance=ROUND(current_balance+?,2) WHERE id=?",
-        t.amount,
-        accountId,
+        "UPDATE transactions SET linked_transaction_id=? WHERE id=?",
+        id,
+        sid,
       );
       await tx.runAsync(
         "UPDATE transactions SET reimbursement_status='SETTLED' WHERE id=?",

@@ -127,6 +127,93 @@ export const ShiftRepository = {
       );
     });
   },
+  async addManual(
+    start: number,
+    end: number,
+    target: number,
+    type: ShiftType,
+    notes: string,
+    settings: Settings,
+  ) {
+    if (
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end <= start ||
+      end > Date.now() ||
+      !Number.isInteger(target) ||
+      target < 1 ||
+      target > 1440
+    )
+      throw Error("Enter valid past times and a target of 1–1440 minutes");
+    await db().withExclusiveTransactionAsync(async (tx) => {
+      if (
+        await tx.getFirstAsync(
+          "SELECT id FROM work_shifts WHERE first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at)>?",
+          new Date(end).toISOString(),
+          new Date(start).toISOString(),
+        )
+      )
+        throw Error("These times overlap another shift");
+      await tx.runAsync(
+        "INSERT INTO work_shifts(id,work_date,tracking_mode,shift_type,target_minutes,buffer_minutes,first_swipe_in,last_swipe_out,status,notes,created_at,cutoff_at) VALUES(?,?,?,?,?,?,?,?,'COMPLETED',?,?,?)",
+        uid(),
+        workDate(start, settings.cutoff),
+        settings.mode,
+        type,
+        target,
+        settings.buffer,
+        new Date(start).toISOString(),
+        new Date(end).toISOString(),
+        notes,
+        Date.now(),
+        new Date(cutoffWindow(start, settings.cutoff).end).toISOString(),
+      );
+    });
+  },
+  async editBreak(id: string, start: number, end: number | null) {
+    const b = await db().getFirstAsync<Break>(
+      "SELECT * FROM shift_breaks WHERE id=?",
+      id,
+    );
+    if (!b) throw Error("Break unavailable");
+    const shift = await db().getFirstAsync<Shift>(
+      "SELECT * FROM work_shifts WHERE id=?",
+      b.shift_id,
+    );
+    if (!shift) throw Error("Shift unavailable");
+    const max = shift.last_swipe_out
+      ? Date.parse(shift.last_swipe_out)
+      : Date.now();
+    if (
+      !Number.isFinite(start) ||
+      start < Date.parse(shift.first_swipe_in) ||
+      start > max ||
+      (end !== null && (!Number.isFinite(end) || end < start || end > max)) ||
+      (end === null && shift.status !== "ACTIVE")
+    )
+      throw Error("Break times must be within the shift");
+    if (
+      await db().getFirstAsync(
+        "SELECT id FROM shift_breaks WHERE shift_id=? AND id<>? AND break_start<? AND COALESCE(break_end,?)>?",
+        shift.id,
+        id,
+        new Date(end ?? max).toISOString(),
+        new Date(max).toISOString(),
+        new Date(start).toISOString(),
+      )
+    )
+      throw Error("Breaks cannot overlap");
+    await db().runAsync(
+      "UPDATE shift_breaks SET break_start=?,break_end=?,duration_minutes=? WHERE id=?",
+      new Date(start).toISOString(),
+      end === null ? null : new Date(end).toISOString(),
+      end === null ? 0 : (end - start) / 60000,
+      id,
+    );
+  },
+  async deleteBreak(id: string) {
+    await db().runAsync("DELETE FROM shift_breaks WHERE id=?", id);
+  },
   async changeTarget(shift: Shift, minutes: number) {
     if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440)
       throw Error("Target must be 1 minute to 24 hours");

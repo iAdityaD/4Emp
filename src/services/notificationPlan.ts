@@ -7,6 +7,7 @@ import {
 } from "../domain/models";
 import { metrics, clock, dateKey, workDate } from "../domain/shift";
 export interface PlannedAlarm {
+  channel?: "work" | "finance";
   id: string;
   at: number;
   title: string;
@@ -20,7 +21,7 @@ export function notificationPlan(
   holidays: Holiday[],
   now: number,
 ): PlannedAlarm[] {
-  if (!settings.notifications) return [];
+  if (!settings.notifications || !settings.workNotifications) return [];
   const muted = new Set([
     ...marks.filter((m) => m.kind !== "WORKED").map((m) => m.work_date),
     ...holidays.filter((h) => !h.is_optional).map((h) => h.holiday_date),
@@ -45,8 +46,8 @@ export function notificationPlan(
       for (const [name, offset, title, body] of [
         [
           "warning",
-          -900000,
-          "15 minutes remaining",
+          -settings.shiftWarningMinutes * 60000,
+          `${settings.shiftWarningMinutes} minutes remaining`,
           `Target: ${clock(m.target)}.`,
         ],
         [
@@ -57,12 +58,16 @@ export function notificationPlan(
         ],
         [
           "overtime",
-          3600000,
+          settings.overtimeMinutes * 60000,
           "Overtime check",
-          "You are one hour past your target.",
+          `You are ${settings.overtimeMinutes} minutes past your target.`,
         ],
       ] as const)
-        if (m.target + offset <= cutoff)
+        if (
+          (name !== "warning" || settings.shiftWarningMinutes > 0) &&
+          (name !== "overtime" || settings.overtimeMinutes > 0) &&
+          m.target + offset <= cutoff
+        )
           push({
             id: `shift-${s.id}-${name}`,
             at: m.target + offset,

@@ -1,12 +1,12 @@
 import { Account, Commitment, Transaction } from "./models";
 import { dateKey, localDate } from "./shift";
 export function cents(amount: number): number {
-  if (!Number.isFinite(amount) || Math.abs(amount) > 1e10)
+  if (!Number.isFinite(amount) || Math.abs(amount) > 9e10)
     throw Error("Invalid amount");
   return Math.round(amount * 100);
 }
 export function parseAmount(input: string): number {
-  if (!/^\d{1,10}(\.\d{1,2})?$/.test(input))
+  if (!/^\d{1,11}(\.\d{1,2})?$/.test(input))
     throw Error("Enter a positive amount with at most two decimal places");
   const n = cents(Number(input));
   if (n <= 0) throw Error("Amount must be positive");

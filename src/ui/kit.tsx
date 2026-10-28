@@ -1,3 +1,4 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -21,18 +22,29 @@ import Animated, {
 } from "react-native-reanimated";
 import { useStore } from "../state/store";
 export function useTheme() {
+  const accent = useStore((s) => s.settings.accent);
   const preference = useStore((s) => s.settings.theme),
     system = useColorScheme();
   const dark =
     preference === "dark" || (preference === "system" && system !== "light");
+  const rgb = [1, 3, 5]
+    .map((i) => parseInt(accent.slice(i, i + 2), 16) / 255)
+    .map((v) =>
+      v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4),
+    );
+  const luminance = rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722;
+  const onAccent = luminance > 0.179 ? "#071A19" : "#FFFFFF";
   return {
     dark,
-    bg: dark ? "#0F1115" : "#F4F6F2",
-    card: dark ? "#191D24" : "#FFFFFF",
+    bg: dark ? "#0F1115" : "#F8F6F1",
+    card: dark ? "#171D23" : "#FFFFFF",
     text: dark ? "#F1F4F0" : "#18221E",
     muted: dark ? "#94A19C" : "#63756A",
-    line: dark ? "#2B3339" : "#DDE5DC",
-    accent: dark ? "#A8F07A" : "#376922",
+    line: dark ? "#2B3339" : "#E9E5DD",
+    accent,
+    onAccent,
+    danger: "#F7505E",
+    success: dark ? "#34D4AA" : "#009F78",
     cyan: dark ? "#75DCE9" : "#146977",
     orange: "#EDAA66",
     purple: "#AF8DE2",
@@ -182,7 +194,7 @@ export function Button({
         style={{
           fontSize: 14,
           fontWeight: "700",
-          color: secondary ? t.text : t.bg,
+          color: secondary ? t.text : t.onAccent,
         }}
       >
         {title}
@@ -213,7 +225,9 @@ export function Chips<T extends string>({
   values,
   value,
   onChange,
+  labels,
 }: {
+  labels?: Partial<Record<T, string>>;
   values: readonly T[];
   value: T;
   onChange: (v: T) => void;
@@ -236,12 +250,12 @@ export function Chips<T extends string>({
           >
             <Text
               style={{
-                color: v === value ? t.bg : t.text,
+                color: v === value ? t.onAccent : t.text,
                 fontSize: 12,
                 fontWeight: "600",
               }}
             >
-              {v.replaceAll("_", " ")}
+              {labels?.[v] ?? v.replaceAll("_", " ")}
             </Text>
           </Pressable>
         ))}
@@ -265,27 +279,72 @@ export function Field({
   multiline?: boolean;
 }) {
   const t = useTheme();
+  const [picker, setPicker] = useState<"date" | "time" | null>(null);
+  const hasDate = label.includes("YYYY-MM-DD"),
+    hasTime = label.includes("HH:mm") || label.includes("THH:mm");
+  const parsed = new Date(value);
+  const chosen = Number.isFinite(parsed.getTime()) ? parsed : new Date();
+  if (!hasDate && /^\d{2}:\d{2}$/.test(value)) {
+    const [h, m] = value.split(":").map(Number);
+    chosen.setHours(h!, m!, 0, 0);
+  }
   return (
     <View style={{ gap: 6 }}>
       <Label muted>{label}</Label>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        keyboardType={numeric ? "decimal-pad" : "default"}
-        secureTextEntry={secure}
-        multiline={multiline}
-        autoCapitalize="none"
-        style={{
-          backgroundColor: t.bg,
-          borderColor: t.line,
-          borderWidth: 1,
-          padding: 14,
-          borderRadius: 13,
-          color: t.text,
-          fontSize: 16,
-        }}
-      />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <TextInput
+          accessibilityLabel={label}
+          value={value}
+          onChangeText={onChange}
+          keyboardType={numeric ? "decimal-pad" : "default"}
+          secureTextEntry={secure}
+          multiline={multiline}
+          autoCapitalize="none"
+          style={{
+            flex: 1,
+            backgroundColor: t.bg,
+            borderColor: t.line,
+            borderWidth: 1,
+            padding: 14,
+            borderRadius: 13,
+            color: t.text,
+            fontSize: 16,
+          }}
+        />
+        {Platform.OS !== "web" && hasDate && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Pick date for ${label}`}
+            onPress={() => setPicker("date")}
+          >
+            <Ionicons name="calendar-outline" color={t.accent} size={24} />
+          </Pressable>
+        )}
+        {Platform.OS !== "web" && hasTime && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Pick time for ${label}`}
+            onPress={() => setPicker("time")}
+          >
+            <Ionicons name="time-outline" color={t.accent} size={24} />
+          </Pressable>
+        )}
+      </View>
+      {picker && Platform.OS !== "web" && (
+        <DateTimePicker
+          value={chosen}
+          mode={picker}
+          display="default"
+          onChange={(event, date) => {
+            setPicker(null);
+            if (event.type === "dismissed" || !date) return;
+            const pad = (n: number) => String(n).padStart(2, "0"),
+              key = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+              time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+            onChange(hasDate ? (hasTime ? `${key}T${time}` : key) : time);
+          }}
+        />
+      )}
     </View>
   );
 }

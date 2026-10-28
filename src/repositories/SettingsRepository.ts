@@ -1,3 +1,4 @@
+import { validateSettings } from "../domain/settingsValidation";
 import { db } from "../db/connection";
 import { defaultSettings, Settings } from "../domain/models";
 export const SettingsRepository = {
@@ -13,9 +14,10 @@ export const SettingsRepository = {
         } catch {
           /* Keep default for corrupt legacy preference. */
         }
-    return result;
+    return validateSettings(result);
   },
   async save<K extends keyof Settings>(key: K, value: Settings[K]) {
+    validateSettings({ ...(await this.load()), [key]: value });
     await db().runAsync(
       "INSERT INTO app_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
       key,

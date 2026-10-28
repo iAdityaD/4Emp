@@ -1,9 +1,10 @@
-import * as SQLite from "expo-sqlite";
+import type * as SQLite from "expo-sqlite";
+import { openDatabase } from "./open";
 import { migrations } from "./schema";
 import { installDatabase } from "./connection";
 let database: SQLite.SQLiteDatabase;
 export async function initializeDatabase() {
-  database = await SQLite.openDatabaseAsync("employee.db");
+  database = await openDatabase("employee.db");
   installDatabase(database);
   await database.execAsync(
     "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
@@ -55,11 +56,12 @@ export async function initializeDatabase() {
     ];
     for (let i = 0; i < names.length; i++)
       await tx.runAsync(
-        "INSERT OR IGNORE INTO categories(id,name,icon_name,color_hex) VALUES(?,?,?,?)",
+        "INSERT OR IGNORE INTO categories(id,name,icon_name,color_hex,kind) VALUES(?,?,?,?,?)",
         names[i]!.toLowerCase(),
         names[i]!,
         icons[i]!,
-        ["#A8F07A", "#75DCE9", "#D2B7FF", "#FDBA74"][i % 4]!,
+        ["#00A88A", "#4397EF", "#F278A4", "#FFA353"][i % 4]!,
+        names[i] === "Salary" ? "INCOME" : "EXPENSE",
       );
   });
 }

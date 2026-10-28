@@ -44,24 +44,34 @@ export function HomeScreen() {
     nav = useNav(),
     now = useNow(),
     t = useTheme();
-  const [type, setType] = useState<ShiftType>("OFFICE"),
-    [custom, setCustom] = useState("180");
+  const [type, setType] = useState<ShiftType>(s.settings.defaultShiftType),
+    [custom, setCustom] = useState(String(s.settings.baseline));
   const active = s.shifts.find((x) => x.status === "ACTIVE"),
     review = s.shifts.find((x) => x.status === "NEEDS_REVIEW");
   const breaks = s.breaks.filter((b) => b.shift_id === active?.id);
   const m = active ? metrics(active, breaks, now) : null;
+  const dayTarget = s.settings.useWeeklyTargets
+    ? (s.settings.weekTargets[(new Date(now).getDay() + 6) % 7] ??
+      s.settings.baseline)
+    : s.settings.baseline;
+  const effectiveSettings = {
+    ...s.settings,
+    baseline: dayTarget || s.settings.baseline,
+  };
   const arrival = safeArrival(
     now,
     s.settings.cutoff,
-    s.settings.baseline,
-    s.settings.buffer,
+    shiftTarget(type, effectiveSettings.baseline, Number(custom)),
+    type === "OPEN_ENDED" ? 0 : s.settings.buffer,
   );
   const muted =
     s.marks.some((x) => x.work_date === dateKey(now) && x.kind !== "WORKED") ||
     s.holidays.some((h) => h.holiday_date === dateKey(now) && !h.is_optional);
   const start = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    void act(() => ShiftRepository.start(type, Number(custom), s.settings));
+    void act(() =>
+      ShiftRepository.start(type, Number(custom), effectiveSettings),
+    );
   };
   const out = () =>
     Alert.alert("Finish shift?", "Record your actual swipe-out time now.", [
@@ -94,7 +104,7 @@ export function HomeScreen() {
     );
   return (
     <Page
-      title="Your personal cockpit."
+      title="Your workday"
       subtitle={new Date(now).toLocaleDateString([], {
         weekday: "long",
         day: "numeric",
@@ -102,12 +112,40 @@ export function HomeScreen() {
       })}
     >
       <Row>
+        <Button
+          title="Calendar"
+          secondary
+          onPress={() => nav.navigate("Calendar")}
+        />
+        <Button
+          title="Profiles"
+          secondary
+          onPress={() => nav.navigate("WorkProfiles")}
+        />
+      </Row>
+      {!active && (
+        <Label muted size={12}>
+          {dayTarget
+            ? `${dayTarget} mandatory minutes today`
+            : "Weekly rest day · manual tracking is available"}{" "}
+          · Preferred start{" "}
+          {clock(
+            new Date(now).setHours(
+              Math.floor(s.settings.startOfDay / 60),
+              s.settings.startOfDay % 60,
+              0,
+              0,
+            ),
+          )}
+        </Label>
+      )}
+      <Row>
         <Label color={t.cyan}>
           {active?.tracking_mode ?? s.settings.mode} mode
         </Label>
         <Edit
           label="Timing settings"
-          onPress={() => nav.navigate("SafeArrival")}
+          onPress={() => nav.navigate("WorkSettings")}
         />
       </Row>
       {s.alarmWarning && (
@@ -179,7 +217,11 @@ export function HomeScreen() {
                     ? hours(m.productive)
                     : hours(m.remaining)
                   : hours(
-                      (shiftTarget(type, s.settings.baseline, Number(custom)) +
+                      (shiftTarget(
+                        type,
+                        effectiveSettings.baseline,
+                        Number(custom),
+                      ) +
                         (type === "OPEN_ENDED" ? 0 : s.settings.buffer)) *
                         60000,
                     )
@@ -389,7 +431,8 @@ export function ShiftDetailsScreen() {
 }
 export function BreakHistoryScreen() {
   const { params } = useRoute<RouteProp<RootStack, "BreakHistory">>(),
-    s = useStore();
+    s = useStore(),
+    nav = useNav();
   const list = s.breaks.filter((b) => b.shift_id === params.shiftId);
   return (
     <Page
@@ -403,6 +446,10 @@ export function BreakHistoryScreen() {
       )}
       {list.map((b) => (
         <Card key={b.id}>
+          <Edit
+            label="Correct break"
+            onPress={() => nav.navigate("BreakEdit", { id: b.id })}
+          />
           <Label>
             {clock(b.break_start)} →{" "}
             {b.break_end ? clock(b.break_end) : "In progress"}

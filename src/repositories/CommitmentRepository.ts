@@ -4,7 +4,7 @@ import { cents } from "../domain/finance";
 export const CommitmentRepository = {
   all: () =>
     db().getAllAsync<Commitment>(
-      "SELECT * FROM fixed_commitments WHERE is_active=1 ORDER BY due_day_of_month",
+      "SELECT *,amount_minor/100.0 AS amount FROM fixed_commitments WHERE is_active=1 ORDER BY due_day_of_month",
     ),
   payments: () =>
     db().getAllAsync<{
@@ -22,10 +22,10 @@ export const CommitmentRepository = {
     )
       throw Error("Enter a title, positive amount and due day 1–31");
     await db().runAsync(
-      "INSERT INTO fixed_commitments(id,title,amount,due_day_of_month,account_id,commitment_type) VALUES(?,?,?,?,?,?)",
+      "INSERT INTO fixed_commitments(id,title,amount_minor,due_day_of_month,account_id,commitment_type) VALUES(?,?,?,?,?,?)",
       uid(),
       c.title,
-      cents(c.amount) / 100,
+      cents(c.amount),
       c.due_day_of_month,
       c.account_id,
       c.commitment_type,
@@ -49,18 +49,13 @@ export const CommitmentRepository = {
         throw Error("Already paid for this cycle");
       const id = uid();
       await tx.runAsync(
-        "INSERT INTO transactions(id,account_id,type,amount,category_id,transaction_date,note,reimbursement_status,ledger_kind,created_at) VALUES(?,?,'EXPENSE',?,'bills',?,?,'NOT_APPLICABLE','COMMITMENT',?)",
+        "INSERT INTO transactions(id,account_id,type,amount_minor,category_id,transaction_date,note,reimbursement_status,ledger_kind,created_at) VALUES(?,?,'EXPENSE',?,'bills',?,?,'NOT_APPLICABLE','COMMITMENT',?)",
         id,
         c.account_id,
-        c.amount,
+        cents(c.amount),
         new Date().toISOString(),
         c.title,
         Date.now(),
-      );
-      await tx.runAsync(
-        "UPDATE accounts SET current_balance=ROUND(current_balance-?,2) WHERE id=?",
-        c.amount,
-        c.account_id,
       );
       await tx.runAsync(
         "INSERT INTO commitment_payments VALUES(?,?,?)",

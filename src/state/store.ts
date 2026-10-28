@@ -1,3 +1,4 @@
+import { userMessage } from "../domain/errors";
 import { create } from "zustand";
 import {
   Shift,
@@ -22,7 +23,12 @@ import { notificationPlan } from "../services/notificationPlan";
 import { dateKey } from "../domain/shift";
 import * as Notifications from "expo-notifications";
 import { native } from "../services/native";
-interface State {
+import { PlanningData, emptyPlanning } from "../features/planning/models";
+import { PlanningRepository } from "../repositories/PlanningRepository";
+import { reconcilePlans } from "../services/recurrence";
+import { db } from "../db/connection";
+import { currency } from "../domain/finance";
+interface State extends PlanningData {
   ready: boolean;
   busy: boolean;
   error: string | null;
@@ -44,7 +50,9 @@ interface State {
     value: Settings[K],
   ): Promise<void>;
 }
+let refreshQueue: Promise<unknown> = Promise.resolve();
 export const useStore = create<State>((set, get) => ({
+  ...emptyPlanning,
   ready: false,
   busy: false,
   error: null,
@@ -60,73 +68,164 @@ export const useStore = create<State>((set, get) => ({
   holidays: [],
   marks: [],
   async refresh() {
-    await ShiftRepository.recover();
-    const [
-      settings,
-      shifts,
-      breaks,
-      accounts,
-      categories,
-      transactions,
-      commitments,
-      payments,
-      holidays,
-      marks,
-    ] = await Promise.all([
-      SettingsRepository.load(),
-      ShiftRepository.all(),
-      ShiftRepository.breaks(),
-      AccountRepository.all(),
-      TransactionRepository.categories(),
-      TransactionRepository.all(),
-      CommitmentRepository.all(),
-      CommitmentRepository.payments(),
-      HolidayRepository.all(),
-      HolidayRepository.marks(),
-    ]);
-    set({
-      settings,
-      shifts,
-      breaks,
-      accounts,
-      categories,
-      transactions,
-      commitments,
-      payments,
-      holidays,
-      marks,
-      ready: true,
-    });
-    if (
-      marks.some((m) => m.work_date === dateKey() && m.kind !== "WORKED") ||
-      holidays.some((h) => h.holiday_date === dateKey() && !h.is_optional)
-    )
-      await Notifications.dismissAllNotificationsAsync();
-    try {
-      await native?.syncCutoffs(
-        JSON.stringify(
-          shifts
-            .filter((x) => x.status === "ACTIVE" && x.cutoff_at)
-            .map((x) => ({ id: x.id, at: Date.parse(x.cutoff_at!) })),
-        ),
+    const task = async () => {
+      await ShiftRepository.recover();
+      const initialSettings = await SettingsRepository.load();
+      await reconcilePlans(
+        Date.now(),
+        initialSettings.financeReminderMinute,
+        initialSettings.cycleDay,
       );
+      const planning = await PlanningRepository.load();
+      const [
+        settings,
+        shifts,
+        breaks,
+        accounts,
+        categories,
+        transactions,
+        commitments,
+        payments,
+        holidays,
+        marks,
+      ] = await Promise.all([
+        SettingsRepository.load(),
+        ShiftRepository.all(),
+        ShiftRepository.breaks(),
+        AccountRepository.all(),
+        TransactionRepository.categories(),
+        TransactionRepository.all(),
+        CommitmentRepository.all(),
+        CommitmentRepository.payments(),
+        HolidayRepository.all(),
+        HolidayRepository.marks(),
+      ]);
       set({
-        alarmWarning: await syncNotifications(
-          notificationPlan(
-            shifts,
-            breaks,
-            settings,
-            marks,
-            holidays,
-            Date.now(),
+        ...planning,
+        settings,
+        shifts,
+        breaks,
+        accounts,
+        categories,
+        transactions,
+        commitments,
+        payments,
+        holidays,
+        marks,
+        ready: true,
+      });
+      if (
+        marks.some((m) => m.work_date === dateKey() && m.kind !== "WORKED") ||
+        holidays.some((h) => h.holiday_date === dateKey() && !h.is_optional)
+      )
+        await Notifications.dismissAllNotificationsAsync();
+      try {
+        await native?.syncCutoffs(
+          JSON.stringify(
+            shifts
+              .filter((x) => x.status === "ACTIVE" && x.cutoff_at)
+              .map((x) => ({ id: x.id, at: Date.parse(x.cutoff_at!) })),
           ),
-        ),
-      });
-    } catch (e) {
-      set({
-        alarmWarning: `Scheduling failed: ${e instanceof Error ? e.message : String(e)}`,
-      });
-    }
+        );
+        const financeAlarms = planning.dueReminders
+          .filter(
+            (r) =>
+              r.enabled &&
+              r.status !== "DISMISSED" &&
+              Date.parse(r.notification_at) > Date.now(),
+          )
+          .sort((a, b) => a.notification_at.localeCompare(b.notification_at))
+          .slice(0, 30)
+          .map((r) => ({
+            channel: "finance" as const,
+            id: r.id,
+            at: Date.parse(r.notification_at),
+            title: r.title,
+            body: `${r.kind} • ${currency(r.amount_minor / 100, settings.currency)} • Due ${r.occurrence_date}`,
+          }));
+        const workAlarms = notificationPlan(
+          shifts,
+          breaks,
+          settings,
+          marks,
+          holidays,
+          Date.now(),
+        );
+        const prioritized = [
+          ...workAlarms.filter(
+            (a) => a.id.startsWith("shift-") || a.id.startsWith("cutoff-"),
+          ),
+          ...(settings.notifications && settings.financeNotifications
+            ? financeAlarms
+            : []),
+          ...workAlarms.filter((a) => a.id.startsWith("reminder-")),
+        ].slice(0, 60);
+        const schedulingWarning = await syncNotifications(prioritized);
+        set({ alarmWarning: schedulingWarning });
+        await db().runAsync(
+          "UPDATE reminders SET status='PENDING' WHERE status='SCHEDULED'",
+        );
+        if (!schedulingWarning) {
+          for (const alarm of prioritized.filter(
+            (a) => a.channel === "finance",
+          ))
+            await db().runAsync(
+              "UPDATE reminders SET status='SCHEDULED' WHERE id=? AND status<>'DISMISSED'",
+              alarm.id,
+            );
+          set({
+            dueReminders: planning.dueReminders.map((r) => ({
+              ...r,
+              status:
+                r.status === "DISMISSED"
+                  ? r.status
+                  : prioritized.some((a) => a.id === r.id)
+                    ? "SCHEDULED"
+                    : "PENDING",
+            })),
+          });
+        }
+        if (
+          settings.notifications &&
+          settings.financeNotifications &&
+          (await Notifications.getPermissionsAsync()).granted
+        ) {
+          const pending = await db().getAllAsync<{
+            budget_id: string;
+            level: number;
+            name: string;
+          }>(
+            "SELECT a.budget_id,a.level,c.name FROM budget_alerts a JOIN budgets b ON b.id=a.budget_id JOIN categories c ON c.id=b.category_id WHERE a.delivered_at IS NULL AND b.month=?",
+            dateKey().slice(0, 7),
+          );
+          for (const alert of pending) {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title:
+                  alert.level === 100
+                    ? "Budget limit reached"
+                    : "Budget heads-up",
+                body: `${alert.name} has reached ${alert.level}% of its monthly limit.`,
+              },
+              trigger: null,
+            });
+            await db().runAsync(
+              "UPDATE budget_alerts SET delivered_at=? WHERE budget_id=? AND level=?",
+              Date.now(),
+              alert.budget_id,
+              alert.level,
+            );
+          }
+        }
+      } catch (e) {
+        set({
+          alarmWarning: `Scheduling failed: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    };
+    const result = refreshQueue.catch(() => {}).then(task);
+    refreshQueue = result;
+    await result;
   },
   async mutate(action) {
     if (get().busy) return false;
@@ -136,7 +235,7 @@ export const useStore = create<State>((set, get) => ({
       await get().refresh();
       return true;
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) });
+      set({ error: userMessage(e) });
       return false;
     } finally {
       set({ busy: false });

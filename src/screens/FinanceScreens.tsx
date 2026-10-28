@@ -39,30 +39,14 @@ function AccountPicker({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const accounts = useStore((s) => s.accounts),
-    t = useTheme();
+  const accounts = useStore((s) => s.accounts);
   return (
-    <Row>
-      {accounts.map((a) => (
-        <Pressable
-          key={a.id}
-          onPress={() => onChange(a.id)}
-          style={{
-            backgroundColor: value === a.id ? t.accent : t.line,
-            padding: 12,
-            borderRadius: 13,
-          }}
-        >
-          <Label size={12} color={value === a.id ? t.bg : t.text}>
-            {a.account_type === "CASH"
-              ? "Cash"
-              : a.account_type === "BANK_1"
-                ? "Bank 1"
-                : "Bank 2"}
-          </Label>
-        </Pressable>
-      ))}
-    </Row>
+    <Chips
+      values={accounts.map((a) => a.id)}
+      labels={Object.fromEntries(accounts.map((a) => [a.id, a.name]))}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 function TransactionRow({ item }: { item: Transaction }) {
@@ -152,7 +136,11 @@ export function QuickEntryScreen() {
   const [account, setAccount] = useState(s.accounts[0]?.id ?? "bank1"),
     [type, setType] = useState<"EXPENSE" | "INCOME">("EXPENSE"),
     [amount, setAmount] = useState(""),
-    [category, setCategory] = useState("food"),
+    [category, setCategory] = useState(
+      s.categories.find(
+        (c) => c.is_active && (c.kind === "EXPENSE" || c.kind === "BOTH"),
+      )?.id ?? "",
+    ),
     [reimburse, setReimburse] = useState(false),
     [extra, setExtra] = useState(false),
     [note, setNote] = useState(""),
@@ -179,7 +167,7 @@ export function QuickEntryScreen() {
           accountId: account,
           type,
           amount: parseAmount(amount),
-          categoryId: type === "INCOME" ? "salary" : category,
+          categoryId: category || undefined,
           note,
           tags: tags
             .split(",")
@@ -195,20 +183,30 @@ export function QuickEntryScreen() {
       <Chips
         values={["EXPENSE", "INCOME"] as const}
         value={type}
-        onChange={setType}
+        onChange={(v) => {
+          setType(v);
+          setCategory(
+            s.categories.find(
+              (c) => c.is_active && (c.kind === v || c.kind === "BOTH"),
+            )?.id ?? "",
+          );
+        }}
       />
       <Card>
-        <Label size={38} weight>
-          {s.settings.currency === "INR" ? "₹" : s.settings.currency}{" "}
-          {amount || "0"}
-        </Label>
-        <Button secondary title="Decimal point" onPress={() => append(".")} />
+        <Row>
+          <Label size={38} weight>
+            {s.settings.currency === "INR" ? "₹" : s.settings.currency}{" "}
+            {amount || "0"}
+          </Label>
+          <Button secondary title="." onPress={() => append(".")} />
+        </Row>
         <AccountPicker value={account} onChange={setAccount} />
-        {type === "EXPENSE" && (
+        {
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {s.categories
-              .filter((c) => c.id !== "salary")
-              .slice(0, 8)
+              .filter(
+                (c) => c.is_active && (c.kind === type || c.kind === "BOTH"),
+              )
               .map((c) => (
                 <Pressable
                   key={c.id}
@@ -234,7 +232,7 @@ export function QuickEntryScreen() {
                 </Pressable>
               ))}
           </View>
-        )}
+        }
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "Done"].map(
             (key) => (
@@ -246,7 +244,7 @@ export function QuickEntryScreen() {
                   else append(key);
                 }}
                 style={{
-                  width: "31.8%",
+                  width: "31%",
                   height: 52,
                   backgroundColor: t.line,
                   borderRadius: 13,
@@ -289,7 +287,7 @@ export function QuickEntryScreen() {
             />
           </>
         )}
-        <Button title="Done" onPress={save} disabled={!amount} />
+        {extra && <Button title="Done" onPress={save} disabled={!amount} />}
       </Card>
     </Page>
   );
@@ -298,7 +296,7 @@ export function TransferScreen() {
   const s = useStore(),
     nav = useNav();
   const [from, setFrom] = useState("bank1"),
-    [to, setTo] = useState("bank2"),
+    [to, setTo] = useState(s.accounts[1]?.id ?? ""),
     [amount, setAmount] = useState("");
   return (
     <Page

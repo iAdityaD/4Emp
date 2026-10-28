@@ -1,3 +1,4 @@
+import { Toggle } from "../features/planning/components";
 import React, { useState } from "react";
 import { Alert, View } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -17,7 +18,13 @@ import { useNav } from "../ui/navigation";
 import { SettingsRepository } from "../repositories/SettingsRepository";
 import { askNotifications } from "../services/notifications";
 import { native, exactAccess } from "../services/native";
-import { exportBackup, exportCSV, restoreBackup } from "../services/backup";
+import {
+  exportBackup,
+  exportCSV,
+  restoreBackup,
+  saveDeviceSnapshot,
+  restoreDeviceSnapshot,
+} from "../services/backup";
 import { Reminder } from "../domain/models";
 import { uid } from "../db/connection";
 export function SettingsScreen() {
@@ -27,7 +34,12 @@ export function SettingsScreen() {
       `${String(Math.floor(s.settings.cutoff / 60)).padStart(2, "0")}:${String(s.settings.cutoff % 60).padStart(2, "0")}`,
     ),
     [cycleDay, setCycle] = useState(String(s.settings.cycleDay)),
-    [office, setOffice] = useState(String(s.settings.officeDays));
+    [office, setOffice] = useState(String(s.settings.officeDays)),
+    [currency, setCurrency] = useState(s.settings.currency),
+    [accent, setAccent] = useState(s.settings.accent),
+    [financeTime, setFinanceTime] = useState(
+      `${String(Math.floor(s.settings.financeReminderMinute / 60)).padStart(2, "0")}:${String(s.settings.financeReminderMinute % 60).padStart(2, "0")}`,
+    );
   return (
     <Page
       title="Make it yours."
@@ -38,7 +50,7 @@ export function SettingsScreen() {
         <Button
           secondary
           title="Target, tracking mode & buffer"
-          onPress={() => nav.navigate("SafeArrival")}
+          onPress={() => nav.navigate("WorkSettings")}
         />
         <Field
           label="Daily reset cutoff (HH:mm, local time)"
@@ -99,10 +111,25 @@ export function SettingsScreen() {
             })
           }
         />
-        <Chips
-          values={["INR", "USD", "EUR", "GBP"]}
-          value={s.settings.currency}
-          onChange={(v) => void s.configure("currency", v)}
+        <Field
+          label="Currency code (e.g. INR, USD, AED)"
+          value={currency}
+          onChange={setCurrency}
+        />
+        <Button
+          title="Save currency"
+          onPress={() =>
+            void act(async () => {
+              const code = currency.trim().toUpperCase();
+              if (!/^[A-Z]{3}$/.test(code))
+                throw Error("Use a three-letter currency code");
+              new Intl.NumberFormat(undefined, {
+                style: "currency",
+                currency: code,
+              });
+              await SettingsRepository.save("currency", code);
+            })
+          }
         />
         <Label muted>
           Currency is a display setting; balances are never converted.
@@ -115,9 +142,71 @@ export function SettingsScreen() {
           value={s.settings.theme}
           onChange={(v) => void s.configure("theme", v)}
         />
+        <Field
+          label="Accent color · #RRGGBB"
+          value={accent}
+          onChange={setAccent}
+        />
+        <Chips
+          values={["#00A88A", "#3B82F6", "#A779F5", "#E86B7A", "#E6A23C"]}
+          value={accent}
+          onChange={setAccent}
+          labels={{
+            "#00A88A": "Teal",
+            "#3B82F6": "Blue",
+            "#A779F5": "Violet",
+            "#E86B7A": "Rose",
+            "#E6A23C": "Amber",
+          }}
+        />
+        <Button
+          title="Apply accent"
+          onPress={() =>
+            void act(async () => {
+              if (!/^#[a-fA-F0-9]{6}$/.test(accent)) throw Error("Use #RRGGBB");
+              await SettingsRepository.save("accent", accent);
+            })
+          }
+        />
       </Card>
       <Card>
         <Label weight>Notifications</Label>
+        <Toggle
+          label="Finance alerts"
+          value={s.settings.financeNotifications}
+          onChange={(v) => void s.configure("financeNotifications", v)}
+        />
+        <Toggle
+          label="Work & break alerts"
+          value={s.settings.workNotifications}
+          onChange={(v) => void s.configure("workNotifications", v)}
+        />
+        <Field
+          label="Finance reminder time · HH:mm"
+          value={financeTime}
+          onChange={setFinanceTime}
+        />
+        <Button
+          secondary
+          title="Save finance reminder time"
+          onPress={() =>
+            void act(async () => {
+              if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(financeTime))
+                throw Error("Use HH:mm");
+              const [h, m] = financeTime.split(":").map(Number);
+              await SettingsRepository.save(
+                "financeReminderMinute",
+                h! * 60 + m!,
+              );
+            })
+          }
+        />
+        <Button
+          secondary
+          title="Finance due dates & reminders"
+          onPress={() => nav.navigate("Reminders")}
+        />
+
         <Button
           secondary
           title={
@@ -357,6 +446,41 @@ export function BackupScreen() {
                 {
                   text: "Choose backup",
                   onPress: () => void act(() => restoreBackup(password)),
+                },
+              ],
+            )
+          }
+        />
+      </Card>
+      <Card>
+        <Label weight>Encrypted device snapshot</Label>
+        <Label muted size={12}>
+          A separate AES-256 key stays in SecureStore. This snapshot works only
+          on this device and does not survive uninstall. Keep a portable
+          passphrase backup too.
+        </Label>
+        <Button
+          title="Save device snapshot"
+          onPress={() =>
+            void act(
+              () => saveDeviceSnapshot(),
+              () => Alert.alert("Snapshot saved", "Encrypted on this device."),
+            )
+          }
+        />
+        <Button
+          secondary
+          title="Restore device snapshot"
+          onPress={() =>
+            Alert.alert(
+              "Replace local records?",
+              "Restore the last encrypted snapshot from this device.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Restore",
+                  style: "destructive",
+                  onPress: () => void act(() => restoreDeviceSnapshot()),
                 },
               ],
             )

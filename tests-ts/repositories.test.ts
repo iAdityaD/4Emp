@@ -14,7 +14,7 @@ function setup() {
   sql.exec("PRAGMA foreign_keys=ON");
   for (const migration of migrations) sql.exec(migration);
   sql.exec(
-    "INSERT INTO accounts(id,name,account_type,current_balance,starting_balance,color_hex) VALUES('bank1','Salary','BANK_1',1000,1000,'#fff'),('bank2','Spends','BANK_2',500,500,'#fff'),('cash','Cash','CASH',100,100,'#fff'); INSERT INTO categories VALUES('food','Food','food','#fff',1),('bills','Bills','bill','#fff',1);",
+    "INSERT INTO accounts(id,name,account_type,opening_minor,color_hex) VALUES('bank1','Salary','BANK_1',100000,'#fff'),('bank2','Spends','BANK_2',50000,'#fff'),('cash','Cash','CASH',10000,'#fff'); INSERT INTO categories(id,name,icon_name,color_hex) VALUES('food','Food','food','#fff'),('bills','Bills','bill','#fff');",
   );
   const adapter = {
     getAllAsync: async (query: string, ...args: (string | number | null)[]) =>
@@ -49,12 +49,15 @@ test("transfer is atomic, preserves liquidity and rolls back invalid destination
     amount: 125.25,
   });
   assert.equal(
-    sql.prepare("SELECT current_balance FROM accounts WHERE id='bank1'").get()!
-      .current_balance,
+    sql
+      .prepare("SELECT current_balance FROM account_balances WHERE id='bank1'")
+      .get()!.current_balance,
     874.75,
   );
   assert.equal(
-    sql.prepare("SELECT SUM(current_balance) total FROM accounts").get()!.total,
+    sql
+      .prepare("SELECT SUM(current_balance) total FROM account_balances")
+      .get()!.total,
     1600,
   );
   await assert.rejects(() =>
@@ -79,8 +82,9 @@ test("reimbursement settles once to chosen account, not personal income", async 
   });
   await TransactionRepository.settle(id, "bank2");
   assert.equal(
-    sql.prepare("SELECT current_balance FROM accounts WHERE id='bank2'").get()!
-      .current_balance,
+    sql
+      .prepare("SELECT current_balance FROM account_balances WHERE id='bank2'")
+      .get()!.current_balance,
     575.15,
   );
   assert.equal(
@@ -93,7 +97,9 @@ test("reimbursement settles once to chosen account, not personal income", async 
   );
   await assert.rejects(() => TransactionRepository.settle(id, "cash"));
   assert.equal(
-    sql.prepare("SELECT SUM(current_balance) total FROM accounts").get()!.total,
+    sql
+      .prepare("SELECT SUM(current_balance) total FROM account_balances")
+      .get()!.total,
     1600,
   );
   sql.close();
@@ -112,8 +118,9 @@ test("opening correction is audited and cents remain stable", async () => {
       amount: 0.1,
     });
   assert.equal(
-    sql.prepare("SELECT current_balance FROM accounts WHERE id='cash'").get()!
-      .current_balance,
+    sql
+      .prepare("SELECT current_balance FROM account_balances WHERE id='cash'")
+      .get()!.current_balance,
     199.25,
   );
   sql.close();
@@ -135,8 +142,9 @@ test("commitment payment is idempotent per cycle", async () => {
     1,
   );
   assert.equal(
-    sql.prepare("SELECT current_balance FROM accounts WHERE id='bank1'").get()!
-      .current_balance,
+    sql
+      .prepare("SELECT current_balance FROM account_balances WHERE id='bank1'")
+      .get()!.current_balance,
     900,
   );
   sql.close();

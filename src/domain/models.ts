@@ -25,13 +25,17 @@ export interface Break {
 export interface Account {
   id: string;
   name: string;
-  account_type: "BANK_1" | "BANK_2" | "CASH";
+  account_type: "BANK_1" | "BANK_2" | "BANK" | "CASH" | "WALLET";
+  opening_minor: number;
+  current_balance_minor: number;
   starting_balance: number;
   current_balance: number;
   color_hex: string;
   is_active: number;
 }
 export interface Category {
+  kind: "EXPENSE" | "INCOME" | "BOTH";
+  is_active: number;
   id: string;
   name: string;
   icon_name: string;
@@ -43,6 +47,7 @@ export interface Transaction {
   account_id: string;
   destination_account_id: string | null;
   type: "EXPENSE" | "INCOME" | "TRANSFER";
+  amount_minor: number;
   amount: number;
   category_id: string | null;
   transaction_date: string;
@@ -88,6 +93,8 @@ export interface Reminder {
   enabled: boolean;
 }
 export interface Settings {
+  shiftWarningMinutes: number;
+  overtimeMinutes: number;
   baseline: number;
   buffer: number;
   cutoff: number;
@@ -95,13 +102,32 @@ export interface Settings {
   weekends: number;
   officeDays: number;
   notifications: boolean;
+  financeNotifications: boolean;
+  workNotifications: boolean;
   lock: boolean;
+  onboarded: boolean;
   theme: "system" | "dark" | "light";
   currency: string;
   cycleDay: number;
   reminders: Reminder[];
+  accent: string;
+  financeReminderMinute: number;
+  hideBalances: boolean;
+  weekTargets: number[];
+  startOfDay: number;
+  useWeeklyTargets: boolean;
+  defaultShiftType: ShiftType;
 }
 export const defaultSettings: Settings = {
+  accent: "#00A88A",
+  financeReminderMinute: 540,
+  hideBalances: false,
+  weekTargets: [510, 510, 510, 510, 510, 0, 0],
+  startOfDay: 540,
+  useWeeklyTargets: false,
+  defaultShiftType: "OFFICE",
+  shiftWarningMinutes: 15,
+  overtimeMinutes: 60,
   baseline: 510,
   buffer: 5,
   cutoff: 1439,
@@ -109,7 +135,10 @@ export const defaultSettings: Settings = {
   weekends: 96,
   officeDays: 5,
   notifications: true,
+  financeNotifications: true,
+  workNotifications: true,
   lock: false,
+  onboarded: false,
   theme: "system",
   currency: "INR",
   cycleDay: 1,
