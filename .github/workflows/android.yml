@@ -2,7 +2,7 @@ name: 4Employee Android
 on:
   push:
     branches: [main]
-    paths-ignore: ["scripts/android-smoke.py"]
+    paths-ignore: ["scripts/android-smoke.py", ".github/workflows/android-ui.yml"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -58,7 +58,8 @@ jobs:
           fetch-depth: 0
       - name: Use the latest test harness when app source is identical
         run: |
-          if git diff --quiet "$GITHUB_SHA" origin/main -- App.tsx index.ts app assets src package.json package-lock.json app.config.ts babel.config.js metro.config.js plugins; then
+          git fetch origin main
+          if git diff --quiet "$GITHUB_SHA" origin/main -- App.tsx index.ts app assets src package.json package-lock.json app.config.ts babel.config.js metro.config.js plugins tsconfig.json; then
             git show origin/main:scripts/android-smoke.py > scripts/android-smoke.py
           fi
       - uses: actions/setup-java@v4

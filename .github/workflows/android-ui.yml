@@ -1,0 +1,86 @@
+name: Android UI retest
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/android-smoke.py", ".github/workflows/android-ui.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  retest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Find an APK with identical app source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,subprocess
+          paths=['App.tsx','index.ts','app','assets','src','package.json','package-lock.json','app.config.ts','babel.config.js','metro.config.js','plugins','tsconfig.json']
+          def same(a,b):
+            return subprocess.run(['git','diff','--quiet',a,b,'--',*paths]).returncode==0
+          if not same('HEAD^','HEAD'):
+            print('App source changed; the main Android workflow will compile and test it.')
+            raise SystemExit(0)
+          def get(path):
+            request=urllib.request.Request('https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+            return json.load(urllib.request.urlopen(request))
+          runs=get('/actions/workflows/android.yml/runs?branch=main&per_page=30')['workflow_runs']
+          for run in runs:
+            sha=run['head_sha']
+            if not same(sha,'HEAD'): continue
+            artifacts=get('/actions/runs/'+str(run['id'])+'/artifacts')['artifacts']
+            if any(a['name']=='4Employee-preview-apk' and not a['expired'] for a in artifacts):
+              with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+                output.write('run_id='+str(run['id'])+'\n')
+              print('Validated matching app source: '+sha+'; APK run '+str(run['id']))
+              break
+          else:
+            raise SystemExit('No matching APK found. Complete the main Android build, then rerun this UI job.')
+          PY
+      - uses: actions/setup-java@v4
+        if: steps.source.outputs.run_id != ''
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        if: steps.source.outputs.run_id != ''
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: actions/download-artifact@v4
+        if: steps.source.outputs.run_id != ''
+        with:
+          name: 4Employee-preview-apk
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: android/app/build/outputs/apk/release
+      - name: Enable emulator acceleration
+        if: steps.source.outputs.run_id != ''
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4emp.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android UI smoke and screenshots
+        if: steps.source.outputs.run_id != ''
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 scripts/android-smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-ui-screenshots
+          path: qa-android/
+          if-no-files-found: ignore
