@@ -124,6 +124,11 @@ export const TransactionRepository = {
         throw Error(
           "Linked and settled entries are protected. Reverse them before editing.",
         );
+      await tx.runAsync(
+        "UPDATE accounts SET is_active=1 WHERE id=? OR id=?",
+        old.account_id,
+        old.destination_account_id,
+      );
       const temp = await writeEntry(tx, e);
       await tx.runAsync(
         `UPDATE transactions SET account_id=?,destination_account_id=?,type=?,amount_minor=?,category_id=?,transaction_date=?,note=?,is_reimbursable=?,reimbursement_status=?,tags=? WHERE id=?`,
@@ -149,6 +154,20 @@ export const TransactionRepository = {
         id,
       );
       if (!old) throw Error("Entry unavailable");
+      const involved = await tx.getAllAsync<{
+        account_id: string;
+        destination_account_id: string | null;
+      }>(
+        "SELECT account_id,destination_account_id FROM transactions WHERE id=? OR linked_transaction_id=?",
+        id,
+        id,
+      );
+      for (const account of involved)
+        await tx.runAsync(
+          "UPDATE accounts SET is_active=1 WHERE id=? OR id=?",
+          account.account_id,
+          account.destination_account_id,
+        );
       if (old.ledger_kind === "REIMBURSEMENT") {
         await tx.runAsync(
           "UPDATE transactions SET reimbursement_status='PENDING' WHERE id=?",

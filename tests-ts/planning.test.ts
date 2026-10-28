@@ -282,6 +282,13 @@ test("goal reservations do not become expenses, and linked transfers undo atomic
   await PlanningRepository.contribute(goal, "a", 10000, "Move", "b");
   const entries = await TransactionRepository.all();
   assert.equal(entries[0]!.type, "TRANSFER");
+  await assert.rejects(() =>
+    TransactionRepository.edit(entries[0]!.id, {
+      accountId: "a",
+      type: "EXPENSE",
+      amount: 1,
+    }),
+  );
   await TransactionRepository.remove(entries[0]!.id);
   const data = await PlanningRepository.load();
   assert.equal(
@@ -346,6 +353,9 @@ test("authenticated snapshot restore is atomic and rejects fractional paise or m
   bad.tables.transactions![0]!.amount_minor = 20.3;
   await assert.rejects(() => replaceSnapshot(conn, bad));
   assert.equal((await TransactionRepository.all())[0]!.amount_minor, 203);
+  const invalidDate = structuredClone(snapshot);
+  invalidDate.tables.transactions![0]!.transaction_date = "not-a-date";
+  await assert.rejects(() => replaceSnapshot(conn, invalidDate));
   const config = structuredClone(snapshot);
   config.tables.app_settings = [{ key: "weekTargets", value: "[1]" }];
   await assert.rejects(() => replaceSnapshot(conn, config));
@@ -388,5 +398,69 @@ test("manual work logs reject overlaps and break corrections remain contained", 
   await assert.rejects(() => ShiftRepository.editBreak("b", start - 1, end));
   await ShiftRepository.editBreak("b", start + 600000, start + 1800000);
   assert.equal((await ShiftRepository.breaks())[0]!.duration_minutes, 20);
+  sql.close();
+});
+test("plans reject wrong category types and inactive transfer destinations before automatic posting", async () => {
+  const sql = testDatabase();
+  await assert.rejects(() =>
+    PlanningRepository.save("salary", {
+      title: "Wrong category",
+      account_id: "a",
+      category_id: "food",
+      amount_minor: 10000,
+      payday: 1,
+      start_date: dateKey(),
+      auto_post: 1,
+      is_active: 1,
+      remind_days: 0,
+    }),
+  );
+  const rule = await PlanningRepository.save("recurring", {
+    title: "Transfer",
+    type: "TRANSFER",
+    account_id: "a",
+    destination_account_id: "b",
+    amount_minor: 10000,
+    anchor_date: dateKey(),
+    interval_count: 1,
+    interval_unit: "MONTH",
+    auto_post: 1,
+    is_active: 1,
+  });
+  await assert.rejects(() => AccountRepository.archive("b"));
+  await PlanningRepository.archive("recurring", rule);
+  await AccountRepository.archive("b");
+  await assert.rejects(() =>
+    PlanningRepository.save("recurring", {
+      title: "Inactive destination",
+      type: "TRANSFER",
+      account_id: "a",
+      destination_account_id: "b",
+      amount_minor: 10000,
+      anchor_date: dateKey(),
+      interval_count: 1,
+      interval_unit: "MONTH",
+      auto_post: 1,
+      is_active: 1,
+    }),
+  );
+  sql.close();
+});
+test("reversing a transaction reopens archived accounts so returned balances cannot disappear", async () => {
+  const sql = testDatabase();
+  const id = await TransactionRepository.create({
+    accountId: "a",
+    destinationId: "b",
+    type: "TRANSFER",
+    amount: 100000,
+  });
+  await AccountRepository.archive("a");
+  assert.ok(!(await AccountRepository.all()).some((a) => a.id === "a"));
+  await TransactionRepository.remove(id);
+  assert.equal(
+    (await AccountRepository.all()).find((a) => a.id === "a")!
+      .current_balance_minor,
+    10000000,
+  );
   sql.close();
 });

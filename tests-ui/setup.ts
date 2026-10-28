@@ -1,4 +1,5 @@
 jest.mock("expo-router", () => ({
+  useSegments: () => [],
   useRouter: () => ({
     push: jest.fn(),
     back: jest.fn(),
@@ -24,7 +25,7 @@ jest.mock("react-native-reanimated", () => {
   const { View } = require("react-native");
   return {
     __esModule: true,
-    default: { View },
+    default: { View, createAnimatedComponent: (c: unknown) => c },
     FadeInDown: { duration: () => undefined },
     useFrameCallback: jest.fn(),
     runOnJS: (fn: unknown) => fn,

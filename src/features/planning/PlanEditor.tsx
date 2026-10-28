@@ -2,6 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import { Alert } from "react-native";
 import { cents, parseAmount } from "../../domain/finance";
+import { parseClock } from "./WorkSettings";
 import { dateKey } from "../../domain/shift";
 import {
   PlanKind,
@@ -11,7 +12,12 @@ import { useStore } from "../../state/store";
 import { Button, Card, Chips, Field, Label, Page, act } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
 import { suggestedEMI } from "./calculations";
-import { AccountChoice, CategoryChoice, Toggle } from "./components";
+import {
+  AccountChoice,
+  CategoryChoice,
+  Toggle,
+  WeekdayChoice,
+} from "./components";
 type Spec = {
   key: string;
   label: string;
@@ -24,7 +30,9 @@ type Spec = {
     | "account"
     | "category"
     | "toggle"
-    | "choice";
+    | "choice"
+    | "time"
+    | "weekdays";
   options?: string[];
 };
 const f = (
@@ -143,8 +151,8 @@ export const editorSpecs: Record<
         "CUSTOM",
         "OPEN_ENDED",
       ]),
-      f("cutoff_minute", "Day reset minute (0–1439)", "number"),
-      f("weekdays", "Active weekday mask (Mon=1 … Sun=64)", "number"),
+      f("cutoff_minute", "Day reset · HH:mm", "time"),
+      f("weekdays", "Working days", "weekdays"),
     ],
   },
 };
@@ -202,9 +210,11 @@ export function PlanEditorScreen() {
             ? Number(v)
               ? String(Number(v) / 100)
               : ""
-            : f.type === "percent"
-              ? String(Number(v) / 100)
-              : String(v),
+            : f.type === "time"
+              ? `${String(Math.floor(Number(v) / 60)).padStart(2, "0")}:${String(Number(v) % 60).padStart(2, "0")}`
+              : f.type === "percent"
+                ? String(Number(v) / 100)
+                : String(v),
         ];
       }),
     ),
@@ -219,15 +229,17 @@ export function PlanEditorScreen() {
           data[f.key] =
             f.type === "money"
               ? cents(parseAmount(v))
-              : f.type === "percent"
-                ? Math.round(Number(v) * 100)
-                : ["number", "toggle"].includes(f.type)
-                  ? Number(v)
-                  : f.key === "deadline" ||
-                      f.type === "category" ||
-                      f.key === "destination_account_id"
-                    ? v || null
-                    : v;
+              : f.type === "time"
+                ? parseClock(v)
+                : f.type === "percent"
+                  ? Math.round(Number(v) * 100)
+                  : ["number", "toggle", "weekdays"].includes(f.type)
+                    ? Number(v)
+                    : f.key === "deadline" ||
+                        f.type === "category" ||
+                        f.key === "destination_account_id"
+                      ? v || null
+                      : v;
         }
         await PlanningRepository.save(kind, data, p.id);
       },
@@ -267,6 +279,14 @@ export function PlanEditorScreen() {
                     }
                     value={raw[f.key] ?? ""}
                     onChange={(v) => change(f.key, v)}
+                  />
+                </>
+              ) : f.type === "weekdays" ? (
+                <>
+                  <Label muted>{f.label}</Label>
+                  <WeekdayChoice
+                    value={Number(raw[f.key])}
+                    onChange={(v) => change(f.key, String(v))}
                   />
                 </>
               ) : f.type === "toggle" ? (

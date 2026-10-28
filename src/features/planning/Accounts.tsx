@@ -5,10 +5,11 @@ import { AccountRepository } from "../../repositories/AccountRepository";
 import { useStore } from "../../state/store";
 import { act, Button, Card, Chips, Field, Page } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
-import { Money, Tile } from "./components";
+import { Money, Tile, Toggle } from "./components";
 export function AccountsScreen() {
   const s = useStore(),
     nav = useNav();
+  const [archived, setArchived] = useState(false);
   return (
     <Page
       title="Accounts"
@@ -18,11 +19,18 @@ export function AccountsScreen() {
         title="＋ Add account"
         onPress={() => nav.navigate("AccountEdit")}
       />
-      {s.accounts.map((a) => (
+      <Toggle
+        label="Show archived accounts"
+        value={archived}
+        onChange={setArchived}
+      />
+      {(archived ? s.archivedAccounts : s.accounts).map((a) => (
         <Tile
           title={a.name}
           key={a.id}
-          subtitle={a.account_type}
+          subtitle={
+            a.account_type.startsWith("BANK") ? "Bank account" : a.account_type
+          }
           color={a.color_hex}
           icon="wallet-outline"
           right={<Money minor={a.current_balance_minor} />}
@@ -36,10 +44,12 @@ export function AccountEditScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>(),
     s = useStore(),
     nav = useNav();
-  const a = s.accounts.find((a) => a.id === id);
+  const a = [...s.accounts, ...s.archivedAccounts].find((a) => a.id === id);
   const [name, setName] = useState(a?.name ?? ""),
     [type, setType] = useState<Account["account_type"]>(
-      a?.account_type ?? "BANK",
+      a?.account_type === "BANK_1" || a?.account_type === "BANK_2"
+        ? "BANK"
+        : (a?.account_type ?? "BANK"),
     ),
     [color, setColor] = useState(a?.color_hex ?? s.settings.accent),
     [balance, setBalance] = useState(a ? String(a.current_balance) : "0");
@@ -51,7 +61,7 @@ export function AccountEditScreen() {
       <Card>
         <Field label="Account name" value={name} onChange={setName} />
         <Chips
-          values={["BANK", "CASH", "WALLET", "BANK_1", "BANK_2"] as const}
+          values={["BANK", "CASH", "WALLET"] as const}
           value={type}
           onChange={setType}
         />
@@ -66,7 +76,7 @@ export function AccountEditScreen() {
           onChange={setBalance}
         />
         <Button
-          title="Save account"
+          title={a && !a.is_active ? "Restore account" : "Save account"}
           onPress={() =>
             void act(
               async () => {

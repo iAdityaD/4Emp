@@ -18,6 +18,7 @@ beforeEach(() => {
     ...emptyPlanning,
     settings: { ...defaultSettings, theme: "light" },
     accounts: [],
+    archivedAccounts: [],
     categories: [],
     transactions: [],
     shifts: [],
@@ -77,4 +78,13 @@ it("deep linked missing transactions render a recoverable unavailable screen", (
   jest.mocked(useLocalSearchParams).mockReturnValue({ id: "missing" });
   const screen = render(<TransactionDetailsScreen />);
   expect(screen.getByText("Entry unavailable")).toBeTruthy();
+});
+
+it("profile editor offers readable weekday buttons and a clock time", () => {
+  jest.mocked(useLocalSearchParams).mockReturnValue({ kind: "profiles" });
+  const screen = render(<PlanEditorScreen />);
+  expect(screen.getByText("Mon")).toBeTruthy();
+  expect(screen.getByText("Sun")).toBeTruthy();
+  expect(screen.getByDisplayValue("23:59")).toBeTruthy();
+  expect(screen.queryByText("Active weekday mask (Mon=1 … Sun=64)")).toBeNull();
 });

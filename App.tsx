@@ -62,6 +62,7 @@ function Runtime({ children }: { children: React.ReactNode }) {
     const review = s.shifts.find((x) => x.status === "NEEDS_REVIEW");
     if (
       !booting &&
+      s.settings.onboarded &&
       unlocked &&
       navigation?.key &&
       review &&
@@ -73,7 +74,7 @@ function Runtime({ children }: { children: React.ReactNode }) {
         params: { shiftId: review.id },
       });
     }
-  }, [s.shifts, booting, unlocked, navigation?.key]);
+  }, [s.shifts, booting, unlocked, navigation?.key, s.settings.onboarded]);
   if (error)
     return (
       <Page title="Could not open your data">

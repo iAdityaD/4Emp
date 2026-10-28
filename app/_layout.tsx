@@ -7,6 +7,7 @@ function Navigation() {
   return (
     <Stack
       screenOptions={{
+        headerShown: false,
         headerStyle: { backgroundColor: t.bg },
         headerTintColor: t.text,
         headerShadowVisible: false,

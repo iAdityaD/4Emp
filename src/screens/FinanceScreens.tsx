@@ -133,7 +133,7 @@ export function QuickEntryScreen() {
   const s = useStore(),
     nav = useNav(),
     t = useTheme();
-  const [account, setAccount] = useState(s.accounts[0]?.id ?? "bank1"),
+  const [account, setAccount] = useState(s.accounts[0]?.id ?? ""),
     [type, setType] = useState<"EXPENSE" | "INCOME">("EXPENSE"),
     [amount, setAmount] = useState(""),
     [category, setCategory] = useState(
@@ -178,6 +178,20 @@ export function QuickEntryScreen() {
         }),
       () => nav.goBack(),
     );
+  if (!s.accounts.length)
+    return (
+      <Page title="Add an account first">
+        <Card>
+          <Label muted>
+            Create a bank, wallet or cash account before recording entries.
+          </Label>
+          <Button
+            title="Create account"
+            onPress={() => nav.navigate("AccountEdit")}
+          />
+        </Card>
+      </Page>
+    );
   return (
     <Page title="Quick entry" subtitle="A few taps. A clear ledger.">
       <Chips
@@ -201,38 +215,56 @@ export function QuickEntryScreen() {
           <Button secondary title="." onPress={() => append(".")} />
         </Row>
         <AccountPicker value={account} onChange={setAccount} />
-        {
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {s.categories
-              .filter(
-                (c) => c.is_active && (c.kind === type || c.kind === "BOTH"),
-              )
-              .map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setCategory(c.id)}
-                  style={{
-                    width: "22%",
-                    paddingVertical: 10,
-                    alignItems: "center",
-                    backgroundColor: category === c.id ? t.line : "transparent",
-                    borderRadius: 12,
-                  }}
-                >
-                  <Ionicons
-                    name={
-                      c.icon_name as React.ComponentProps<
-                        typeof Ionicons
-                      >["name"]
-                    }
-                    size={23}
-                    color={category === c.id ? t.accent : t.muted}
-                  />
-                  <Label size={10}>{c.name}</Label>
-                </Pressable>
-              ))}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {Array.from(
+              {
+                length: Math.ceil(
+                  s.categories.filter(
+                    (c) =>
+                      c.is_active && (c.kind === type || c.kind === "BOTH"),
+                  ).length / 2,
+                ),
+              },
+              (_, column) => (
+                <View key={column} style={{ gap: 8 }}>
+                  {s.categories
+                    .filter(
+                      (c) =>
+                        c.is_active && (c.kind === type || c.kind === "BOTH"),
+                    )
+                    .slice(column * 2, column * 2 + 2)
+                    .map((c) => (
+                      <Pressable
+                        key={c.id}
+                        accessibilityLabel={`Category ${c.name}`}
+                        onPress={() => setCategory(c.id)}
+                        style={{
+                          width: 76,
+                          paddingVertical: 10,
+                          alignItems: "center",
+                          borderRadius: 14,
+                          backgroundColor:
+                            category === c.id ? t.line : "transparent",
+                        }}
+                      >
+                        <Ionicons
+                          name={
+                            c.icon_name as React.ComponentProps<
+                              typeof Ionicons
+                            >["name"]
+                          }
+                          size={23}
+                          color={category === c.id ? t.accent : t.muted}
+                        />
+                        <Label size={10}>{c.name}</Label>
+                      </Pressable>
+                    ))}
+                </View>
+              ),
+            )}
           </View>
-        }
+        </ScrollView>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "Done"].map(
             (key) => (
@@ -295,7 +327,7 @@ export function QuickEntryScreen() {
 export function TransferScreen() {
   const s = useStore(),
     nav = useNav();
-  const [from, setFrom] = useState("bank1"),
+  const [from, setFrom] = useState(s.accounts[0]?.id ?? ""),
     [to, setTo] = useState(s.accounts[1]?.id ?? ""),
     [amount, setAmount] = useState("");
   return (
@@ -484,7 +516,7 @@ export function ReimbursementsScreen() {
   const s = useStore(),
     t = useTheme();
   const [status, setStatus] = useState<"PENDING" | "SETTLED">("PENDING"),
-    [account, setAccount] = useState("bank1");
+    [account, setAccount] = useState(s.accounts[0]?.id ?? "");
   const list = s.transactions.filter(
       (x) => x.is_reimbursable && x.reimbursement_status === status,
     ),
@@ -565,7 +597,7 @@ export function CommitmentsScreen() {
   const [title, setTitle] = useState(""),
     [amount, setAmount] = useState(""),
     [day, setDay] = useState("1"),
-    [account, setAccount] = useState("bank1"),
+    [account, setAccount] = useState(s.accounts[0]?.id ?? ""),
     [type, setType] = useState<Commitment["commitment_type"]>("EMI");
   return (
     <Page

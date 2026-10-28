@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db, uid } from "../db/connection";
 import { writeEntry } from "./TransactionRepository";
-import { Account } from "../domain/models";
+import { Account, Category } from "../domain/models";
 import { dateKey } from "../domain/shift";
 import {
   PlanningData,
@@ -148,6 +148,33 @@ export const PlanningRepository = {
         ))
       )
         throw Error("Choose an active account");
+      if (data.category_id) {
+        const c = await tx.getFirstAsync<Category>(
+          "SELECT * FROM categories WHERE id=? AND is_active=1",
+          data.category_id,
+        );
+        const expected =
+          kind === "salary"
+            ? "INCOME"
+            : kind === "recurring"
+              ? data.type
+              : "EXPENSE";
+        if (
+          !c ||
+          (expected !== "TRANSFER" && c.kind !== "BOTH" && c.kind !== expected)
+        )
+          throw Error(
+            "Choose a category matching this plan’s income or expense type",
+          );
+      }
+      if (
+        data.destination_account_id &&
+        !(await tx.getFirstAsync(
+          "SELECT id FROM accounts WHERE id=? AND is_active=1",
+          data.destination_account_id,
+        ))
+      )
+        throw Error("Choose an active destination account");
       if (
         kind === "recurring" &&
         data.type === "TRANSFER" &&

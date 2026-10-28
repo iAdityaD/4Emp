@@ -7,6 +7,7 @@ import * as SecureStore from "expo-secure-store";
 import { gcm } from "@noble/ciphers/aes";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils";
 import { openDatabase } from "../db/open";
+import { SettingsRepository } from "../repositories/SettingsRepository";
 import { db } from "../db/connection";
 import { backupTables, migrations } from "../db/schema";
 import { encryptBackup, decryptBackup, csv, Envelope } from "./crypto";
@@ -94,6 +95,19 @@ async function migrateBackup(input: unknown) {
     await SQLite.deleteDatabaseAsync(temporaryName);
   }
 }
+async function preserveDeviceSecurity(
+  snapshot: Awaited<ReturnType<typeof migrateBackup>>,
+) {
+  const settings = await SettingsRepository.load();
+  snapshot.tables.app_settings = (snapshot.tables.app_settings ?? []).filter(
+    (row) => row.key !== "lock" && row.key !== "onboarded",
+  );
+  snapshot.tables.app_settings.push(
+    { key: "lock", value: JSON.stringify(settings.lock) },
+    { key: "onboarded", value: "true" },
+  );
+  return snapshot;
+}
 export async function restoreBackup(password: string) {
   const file = await Picker.getDocumentAsync({
     type: "application/json",
@@ -111,7 +125,7 @@ export async function restoreBackup(password: string) {
   const decoded = await migrateBackup(
     JSON.parse(await decryptBackup(JSON.parse(raw) as Envelope, password)),
   );
-  await replaceSnapshot(db(), decoded);
+  await replaceSnapshot(db(), await preserveDeviceSecurity(decoded));
   return true;
 }
 const vaultKeyName = "4emp-device-vault-key";
@@ -159,7 +173,10 @@ export async function restoreDeviceSnapshot() {
     const plain = new TextDecoder().decode(
       gcm(key, hexToBytes(e.nonce)).decrypt(hexToBytes(e.ciphertext)),
     );
-    await replaceSnapshot(db(), await migrateBackup(JSON.parse(plain)));
+    await replaceSnapshot(
+      db(),
+      await preserveDeviceSecurity(await migrateBackup(JSON.parse(plain))),
+    );
   } finally {
     key.fill(0);
   }

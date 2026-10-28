@@ -37,6 +37,7 @@ interface State extends PlanningData {
   shifts: Shift[];
   breaks: Break[];
   accounts: Account[];
+  archivedAccounts: Account[];
   categories: Category[];
   transactions: Transaction[];
   commitments: Commitment[];
@@ -61,6 +62,7 @@ export const useStore = create<State>((set, get) => ({
   shifts: [],
   breaks: [],
   accounts: [],
+  archivedAccounts: [],
   categories: [],
   transactions: [],
   commitments: [],
@@ -77,6 +79,7 @@ export const useStore = create<State>((set, get) => ({
         initialSettings.cycleDay,
       );
       const planning = await PlanningRepository.load();
+      const archivedAccounts = await AccountRepository.archived();
       const [
         settings,
         shifts,
@@ -102,6 +105,7 @@ export const useStore = create<State>((set, get) => ({
       ]);
       set({
         ...planning,
+        archivedAccounts,
         settings,
         shifts,
         breaks,

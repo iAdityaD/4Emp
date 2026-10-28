@@ -112,48 +112,32 @@ export function HomeScreen() {
       })}
     >
       <Row>
-        <Button
-          title="Calendar"
-          secondary
-          onPress={() => nav.navigate("Calendar")}
-        />
-        <Button
-          title="Profiles"
-          secondary
-          onPress={() => nav.navigate("WorkProfiles")}
-        />
-      </Row>
-      {!active && (
-        <Label muted size={12}>
-          {dayTarget
-            ? `${dayTarget} mandatory minutes today`
-            : "Weekly rest day · manual tracking is available"}{" "}
-          · Preferred start{" "}
-          {clock(
-            new Date(now).setHours(
-              Math.floor(s.settings.startOfDay / 60),
-              s.settings.startOfDay % 60,
-              0,
-              0,
-            ),
-          )}
-        </Label>
-      )}
-      <Row>
         <Label color={t.cyan}>
           {active?.tracking_mode ?? s.settings.mode} mode
         </Label>
-        <Edit
-          label="Timing settings"
-          onPress={() => nav.navigate("WorkSettings")}
-        />
+        <Row>
+          <Pressable
+            accessibilityLabel="Open work calendar"
+            onPress={() => nav.navigate("Calendar")}
+            style={{ padding: 12 }}
+          >
+            <Label color={t.cyan}>Calendar</Label>
+          </Pressable>
+          <Edit
+            label="Timing settings"
+            onPress={() => nav.navigate("WorkSettings")}
+          />
+        </Row>
       </Row>
       {s.alarmWarning && (
-        <Card>
-          <Label size={12} color={t.orange}>
-            {s.alarmWarning}
+        <Pressable
+          onPress={() => nav.navigate("Settings")}
+          accessibilityRole="button"
+        >
+          <Label muted size={11}>
+            {s.alarmWarning} · Configure
           </Label>
-        </Card>
+        </Pressable>
       )}
       {review && (
         <Card>
@@ -188,15 +172,10 @@ export function HomeScreen() {
         <>
           {!active && (
             <>
-              <Card>
-                <Label size={12} color={t.cyan}>
-                  Cutoff {clock(arrival.cutoff)} • Swipe in by{" "}
-                  {clock(arrival.latest)}
-                </Label>
-                <Label muted size={12}>
-                  Fulfill today’s target before the company day resets.
-                </Label>
-              </Card>
+              <Label size={12} color={t.cyan}>
+                Swipe in by {clock(arrival.latest)} · Reset{" "}
+                {clock(arrival.cutoff)}
+              </Label>
               <Chips values={types} value={type} onChange={setType} />
               {type === "CUSTOM" && (
                 <Field

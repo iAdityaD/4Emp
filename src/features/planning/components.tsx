@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, Switch, View } from "react-native";
+import { useNav } from "../../ui/navigation";
 import { useStore } from "../../state/store";
-import { Card, Chips, Label, Row, useTheme } from "../../ui/kit";
+import { Button, Card, Chips, Label, Row, useTheme } from "../../ui/kit";
 export function Money({
   minor,
   large = false,
@@ -142,6 +143,14 @@ export function AccountChoice({
   optional?: boolean;
 }) {
   const accounts = useStore((s) => s.accounts);
+  const nav = useNav();
+  if (!accounts.length)
+    return (
+      <Button
+        title="Create an account"
+        onPress={() => nav.navigate("AccountEdit")}
+      />
+    );
   return (
     <Chips
       values={[...(optional ? [""] : []), ...accounts.map((a) => a.id)]}
@@ -178,5 +187,25 @@ export function CategoryChoice({
       value={value}
       onChange={onChange}
     />
+  );
+}
+export function WeekdayChoice({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <Row>
+      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, i) => (
+        <Button
+          key={day}
+          title={day}
+          secondary={!(value & (1 << i))}
+          onPress={() => onChange(value ^ (1 << i))}
+        />
+      ))}
+    </Row>
   );
 }

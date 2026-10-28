@@ -266,9 +266,9 @@ export function SettingsScreen() {
                 id: uid(),
                 title: "Reminder",
                 message: "Time for a pause.",
-                minute: 840,
-                days: 31,
-                enabled: true,
+                minute: s.settings.startOfDay,
+                days: 127 ^ s.settings.weekends || 127,
+                enabled: false,
               },
             ])
           }
@@ -429,6 +429,7 @@ export function BackupScreen() {
         <Label muted size={12}>
           Encrypted JSON uses AES-256-GCM and PBKDF2-SHA256. The passphrase is
           never saved. Keep it somewhere safe; there is no recovery service.
+          Restores keep this device’s current app-lock setting.
         </Label>
         <Button
           title="Create encrypted backup"

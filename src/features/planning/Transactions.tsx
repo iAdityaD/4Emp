@@ -249,7 +249,7 @@ export function TransactionDetailsScreen() {
           onPress={() =>
             Alert.alert(
               "Reverse this entry?",
-              "Its balance effect is removed. A linked EMI or subscription becomes unpaid. Recurring identities stay recorded to prevent automatic reposting.",
+              "Its balance effect is removed. A linked EMI or subscription becomes unpaid. Recurring identities stay recorded to prevent automatic reposting. Archived accounts affected by the reversal are reopened so their balances stay visible.",
               [
                 { text: "Cancel", style: "cancel" },
                 {

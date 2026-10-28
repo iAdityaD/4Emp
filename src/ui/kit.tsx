@@ -1,3 +1,4 @@
+import { useRouter, useSegments } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
@@ -8,6 +9,7 @@ import {
   TextInput,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -88,12 +90,37 @@ export function Page({
   children: React.ReactNode;
   scroll?: boolean;
 }) {
-  const t = useTheme();
+  const t = useTheme(),
+    router = useRouter(),
+    segments = useSegments();
+  const showBack =
+    segments.length > 0 && segments[0] !== "(tabs)" && router.canGoBack();
   const inner = (
     <View style={{ padding: 22, gap: 16, flex: scroll ? undefined : 1 }}>
-      <Label size={28} weight>
-        {title}
-      </Label>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        {showBack && (
+          <Pressable
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+            onPress={() => router.back()}
+            style={{
+              width: 40,
+              height: 44,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 13,
+              backgroundColor: t.line,
+            }}
+          >
+            <Ionicons name="arrow-back" size={21} color={t.text} />
+          </Pressable>
+        )}
+        <View style={{ flex: 1 }}>
+          <Label size={28} weight>
+            {title}
+          </Label>
+        </View>
+      </View>
       {subtitle && <Label muted>{subtitle}</Label>}
       {children}
     </View>
@@ -232,9 +259,19 @@ export function Chips<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
-  const t = useTheme();
+  const t = useTheme(),
+    { fontScale } = useWindowDimensions();
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{
+        flexGrow: 0,
+        flexShrink: 0,
+        height: Math.max(44, Math.ceil(12 * fontScale * 1.4 + 24)),
+      }}
+      contentContainerStyle={{ alignItems: "center" }}
+    >
       <View style={{ flexDirection: "row", gap: 8 }}>
         {values.map((v) => (
           <Pressable

@@ -8,6 +8,10 @@ export const AccountRepository = {
     db().getAllAsync<Account>(
       "SELECT * FROM account_balances WHERE is_active=1 ORDER BY account_type,name",
     ),
+  archived: () =>
+    db().getAllAsync<Account>(
+      "SELECT * FROM account_balances WHERE is_active=0 ORDER BY name",
+    ),
   async save(
     id: string | null,
     name: string,
@@ -20,7 +24,7 @@ export const AccountRepository = {
       .parse(color);
     const key = id ?? uid();
     await db().runAsync(
-      "INSERT INTO accounts(id,name,account_type,color_hex) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,account_type=excluded.account_type,color_hex=excluded.color_hex",
+      "INSERT INTO accounts(id,name,account_type,color_hex) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,account_type=excluded.account_type,color_hex=excluded.color_hex,is_active=1",
       key,
       name.trim(),
       type,
@@ -51,11 +55,17 @@ export const AccountRepository = {
         throw Error("Update active financial plans using this account first");
     if (
       await db().getFirstAsync(
-        "SELECT id FROM goal_contributions WHERE account_id=?",
+        "SELECT id FROM recurring_rules WHERE destination_account_id=? AND is_active=1",
         id,
       )
     )
-      throw Error("Release goal allocations before archiving");
+      throw Error("Update recurring transfers using this destination first");
+    const reserved = await db().getFirstAsync<{ n: number }>(
+      "SELECT COALESCE(SUM(c.amount_minor),0) n FROM goal_contributions c JOIN savings_goals g ON g.id=c.goal_id WHERE c.account_id=? AND g.is_active=1",
+      id,
+    );
+    if ((reserved?.n ?? 0) !== 0)
+      throw Error("Release active goal reservations before archiving");
     await db().runAsync("UPDATE accounts SET is_active=0 WHERE id=?", id);
   },
   async rebalance(id: string, name: string, balance: number) {
