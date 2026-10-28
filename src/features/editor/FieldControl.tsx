@@ -256,8 +256,8 @@ export function FieldControl({
           if (spec.type === "money" || spec.type === "signedMoney") {
             const n = Number(v);
             onChange(
-              v && Number.isFinite(n)
-                ? Math.abs(n) <= 9e10
+              v
+                ? Number.isFinite(n) && Math.abs(n) <= 9e10
                   ? cents(n)
                   : NaN
                 : 0,

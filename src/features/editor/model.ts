@@ -547,6 +547,10 @@ export function validateValue(
   kind?: PlanKind,
 ) {
   if (spec.optional && (value === null || value === "")) return;
+  if (spec.type === "duration" && !Number.isFinite(Number(value)))
+    throw Error("Use hours 0–24 and minutes 0–59");
+  if (spec.type === "tenure" && !Number.isFinite(Number(value)))
+    throw Error("Use years and months 0–11");
   if (spec.type === "money") z.number().int().positive().max(9e12).parse(value);
   if (["number", "duration", "percent", "tenure"].includes(spec.type))
     z.number().int().nonnegative().parse(value);

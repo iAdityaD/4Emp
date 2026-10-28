@@ -197,3 +197,23 @@ it("monthly bill payments default to the configured funding account", () => {
       .selected,
   ).toBe(true);
 });
+
+it("incomplete signed amounts cannot silently become a zero reconciliation", () => {
+  const change = jest.fn();
+  const s = render(
+    <FieldControl
+      spec={{
+        key: "balance_minor",
+        label: "Balance",
+        type: "signedMoney",
+        icon: "cash-outline",
+      }}
+      value={12000}
+      onChange={change}
+    />,
+  );
+  fireEvent.changeText(s.getByLabelText("Balance"), "-");
+  expect(Number.isNaN(change.mock.calls.at(-1)![0])).toBe(true);
+  fireEvent.changeText(s.getByLabelText("Balance"), "-12.50");
+  expect(change).toHaveBeenLastCalledWith(-1250);
+});
