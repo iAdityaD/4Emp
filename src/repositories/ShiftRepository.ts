@@ -1,12 +1,8 @@
 import { db, uid } from "../db/connection";
 import { Shift, Break, ShiftType, Settings } from "../domain/models";
-import {
-  cutoffWindow,
-  shiftTarget,
-  workDate,
-  dateKey,
-  metrics,
-} from "../domain/shift";
+import { cutoffWindow, workDate, metrics } from "../domain/shift";
+import { shiftStartPlan, StartOptions } from "../domain/workSchedule";
+import { SettingsRepository } from "./SettingsRepository";
 export const ShiftRepository = {
   all: () =>
     db().getAllAsync<Shift>(
@@ -20,14 +16,28 @@ export const ShiftRepository = {
       new Date(now).toISOString(),
     );
   },
-  async start(type: ShiftType, custom: number, settings: Settings) {
+  async start(
+    type: ShiftType,
+    custom: number,
+    settings: Settings,
+    options: StartOptions = {},
+  ) {
     await this.recover();
     const existing = await db().getFirstAsync<Shift>(
       "SELECT * FROM work_shifts WHERE status IN ('ACTIVE','NEEDS_REVIEW')",
     );
     if (existing) throw Error("Complete or review the previous shift first");
-    const now = Date.now(),
-      target = shiftTarget(type, settings.baseline, custom);
+    const now = Date.now();
+    const plan = shiftStartPlan(now, settings, type, custom, options);
+    if (plan.requiresRestConfirmation)
+      throw Error(
+        "Today is a rest day. Confirm a daily-target override, or choose Custom or Stopwatch.",
+      );
+    if (plan.exceedsCutoff && !options.allowLateStart)
+      throw Error(
+        "Your target is after day reset. Confirm the late start first.",
+      );
+    const target = plan.target;
     if (
       type !== "OPEN_ENDED" &&
       (!Number.isFinite(target) || target <= 0 || target > 1440)
@@ -36,14 +46,14 @@ export const ShiftRepository = {
     await db().runAsync(
       "INSERT INTO work_shifts(id,work_date,tracking_mode,shift_type,target_minutes,buffer_minutes,first_swipe_in,status,created_at,cutoff_at) VALUES(?,?,?,?,?,?,?,'ACTIVE',?,?)",
       uid(),
-      workDate(now, settings.cutoff),
+      plan.day,
       settings.mode,
       type,
       target,
       type === "OPEN_ENDED" ? 0 : settings.buffer,
       new Date(now).toISOString(),
       now,
-      new Date(cutoffWindow(now, settings.cutoff).end).toISOString(),
+      new Date(plan.cutoff).toISOString(),
     );
   },
   async toggleBreak(shift: Shift) {
@@ -99,12 +109,17 @@ export const ShiftRepository = {
       )
     )
       throw Error("Times must contain all recorded breaks");
+    const savedCutoff = shift.cutoff_at ? new Date(shift.cutoff_at) : null;
+    const cutoffMinute =
+      savedCutoff && Number.isFinite(savedCutoff.getTime())
+        ? savedCutoff.getHours() * 60 + savedCutoff.getMinutes()
+        : (await SettingsRepository.load()).cutoff;
+    const correctedCutoff = cutoffWindow(start, cutoffMinute).end;
+    const correctedDate = workDate(start, cutoffMinute);
     const other = await db().getFirstAsync<Shift>(
       "SELECT * FROM work_shifts WHERE id<>? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at)>?",
       shift.id,
-      new Date(
-        end ?? Date.parse(shift.cutoff_at ?? new Date().toISOString()),
-      ).toISOString(),
+      new Date(end ?? correctedCutoff).toISOString(),
       new Date(start).toISOString(),
     );
     if (other) throw Error("Shift times overlap");
@@ -118,11 +133,17 @@ export const ShiftRepository = {
         );
       }
       await tx.runAsync(
-        "UPDATE work_shifts SET first_swipe_in=?,last_swipe_out=?,notes=?,status=? WHERE id=?",
+        "UPDATE work_shifts SET first_swipe_in=?,last_swipe_out=?,notes=?,status=?,work_date=?,cutoff_at=? WHERE id=?",
         new Date(start).toISOString(),
         end === null ? null : new Date(end).toISOString(),
         notes,
-        end === null ? shift.status : "COMPLETED",
+        end === null
+          ? correctedCutoff <= Date.now()
+            ? "NEEDS_REVIEW"
+            : "ACTIVE"
+          : "COMPLETED",
+        correctedDate,
+        new Date(correctedCutoff).toISOString(),
         shift.id,
       );
     });

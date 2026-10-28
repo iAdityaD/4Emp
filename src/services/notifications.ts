@@ -44,7 +44,7 @@ export function syncNotifications(plan: PlannedAlarm[]) {
             content: {
               title: alarm.title,
               body: alarm.body,
-              data: { id: alarm.id },
+              data: { id: alarm.id, channel: alarm.channel ?? "work" },
               sound: "default",
             },
             trigger: {
@@ -56,4 +56,21 @@ export function syncNotifications(plan: PlannedAlarm[]) {
       return null;
     });
   return serial as Promise<string | null>;
+}
+
+export async function dismissWorkNotifications() {
+  const shown = await Notifications.getPresentedNotificationsAsync().catch(
+    () => [],
+  );
+  for (const notification of shown) {
+    const data = notification.request.content.data;
+    const id = String(data?.id ?? "");
+    if (
+      data?.channel === "work" ||
+      (data?.channel == null && /^(shift-|cutoff-|reminder-)/.test(id))
+    )
+      await Notifications.dismissNotificationAsync(
+        notification.request.identifier,
+      );
+  }
 }

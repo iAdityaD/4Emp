@@ -8,7 +8,8 @@ import { TransactionRepository } from "../src/repositories/TransactionRepository
 import { AccountRepository } from "../src/repositories/AccountRepository";
 import { CommitmentRepository } from "../src/repositories/CommitmentRepository";
 import { ShiftRepository } from "../src/repositories/ShiftRepository";
-import { defaultSettings } from "../src/domain/models";
+import { defaultSettings as defaults } from "../src/domain/models";
+const defaultSettings = { ...defaults, weekends: 0 };
 function setup() {
   const sql = new DatabaseSync(":memory:");
   sql.exec("PRAGMA foreign_keys=ON");
@@ -149,7 +150,11 @@ test("commitment payment is idempotent per cycle", async () => {
   );
   sql.close();
 });
-test("foreign keys enforce relationships and active shift uniqueness; flexible target snapshots", async () => {
+test("foreign keys enforce relationships and active shift uniqueness; flexible target snapshots", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date(2026, 9, 19, 9, 4).getTime(),
+  });
   const sql = setup();
   await ShiftRepository.start("CUSTOM", 420, { ...defaultSettings, buffer: 3 });
   const active = (await ShiftRepository.all())[0]!;
@@ -173,7 +178,11 @@ test("foreign keys enforce relationships and active shift uniqueness; flexible t
   sql.close();
 });
 
-test("time correction rejects invalid input without writes and closes live breaks atomically", async () => {
+test("time correction rejects invalid input without writes and closes live breaks atomically", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date(2026, 9, 19, 9, 4).getTime(),
+  });
   const sql = setup();
   await ShiftRepository.start("OFFICE", 0, defaultSettings);
   const shift = (await ShiftRepository.all())[0]!;

@@ -81,7 +81,7 @@ test("cutoff locks elapsed and requires review, early cutoff attributes previous
     Date.parse(shift.cutoff_at!) - 545 * 60000,
   );
 });
-test("three native alert timestamps; no mandatory alarms in WFH/open-ended", () => {
+test("three native alert timestamps; WFH gets completion alerts and stopwatch has none", () => {
   const settings = { ...defaultSettings, reminders: [] };
   const p = notificationPlan([shift], [], settings, [], [], start);
   assert.equal(
@@ -104,8 +104,8 @@ test("three native alert timestamps; no mandatory alarms in WFH/open-ended", () 
       [],
       [],
       start,
-    ).length,
-    0,
+    ).filter((a) => a.id.startsWith("shift-")).length,
+    3,
   );
   assert.equal(
     notificationPlan(

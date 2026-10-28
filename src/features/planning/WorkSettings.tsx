@@ -175,36 +175,13 @@ export function WorkProfilesScreen() {
                   label={`Apply ${p.title}`}
                   onPress={() =>
                     void act(
-                      async () => {
-                        await SettingsRepository.save(
-                          "baseline",
-                          p.target_minutes,
-                        );
-                        await SettingsRepository.save(
-                          "buffer",
-                          p.buffer_minutes,
-                        );
-                        await SettingsRepository.save("mode", p.tracking_mode);
-                        await SettingsRepository.save(
-                          "cutoff",
-                          p.cutoff_minute,
-                        );
-                        await SettingsRepository.save(
-                          "defaultShiftType",
-                          p.shift_type,
-                        );
-                        await SettingsRepository.save(
-                          "weekends",
-                          127 ^ p.weekdays,
-                        );
-                        await SettingsRepository.save(
-                          "weekTargets",
-                          [0, 1, 2, 3, 4, 5, 6].map((i) =>
-                            p.weekdays & (1 << i) ? p.target_minutes : 0,
-                          ),
-                        );
+                      () => SettingsRepository.applyWorkProfile(p.id),
+                      () => {
+                        useStore.setState((state) => ({
+                          workProfileRevision: state.workProfileRevision + 1,
+                        }));
+                        nav.goBack();
                       },
-                      () => nav.goBack(),
                     )
                   }
                 />

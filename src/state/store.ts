@@ -18,9 +18,12 @@ import { TransactionRepository } from "../repositories/TransactionRepository";
 import { CommitmentRepository } from "../repositories/CommitmentRepository";
 import { HolidayRepository } from "../repositories/HolidayRepository";
 import { SettingsRepository } from "../repositories/SettingsRepository";
-import { syncNotifications } from "../services/notifications";
+import {
+  syncNotifications,
+  dismissWorkNotifications,
+} from "../services/notifications";
 import { notificationPlan } from "../services/notificationPlan";
-import { dateKey } from "../domain/shift";
+import { dateKey, workDate } from "../domain/shift";
 import * as Notifications from "expo-notifications";
 import { native } from "../services/native";
 import { PlanningData, emptyPlanning } from "../features/planning/models";
@@ -29,6 +32,7 @@ import { reconcilePlans } from "../services/recurrence";
 import { db } from "../db/connection";
 import { currency } from "../domain/finance";
 interface State extends PlanningData {
+  workProfileRevision: number;
   ready: boolean;
   busy: boolean;
   error: string | null;
@@ -54,6 +58,7 @@ interface State extends PlanningData {
 let refreshQueue: Promise<unknown> = Promise.resolve();
 export const useStore = create<State>((set, get) => ({
   ...emptyPlanning,
+  workProfileRevision: 0,
   ready: false,
   busy: false,
   error: null,
@@ -118,11 +123,18 @@ export const useStore = create<State>((set, get) => ({
         marks,
         ready: true,
       });
+      const currentWorkDate =
+        shifts.find((s) => s.status === "ACTIVE")?.work_date ??
+        workDate(Date.now(), settings.cutoff);
       if (
-        marks.some((m) => m.work_date === dateKey() && m.kind !== "WORKED") ||
-        holidays.some((h) => h.holiday_date === dateKey() && !h.is_optional)
+        marks.some(
+          (m) => m.work_date === currentWorkDate && m.kind !== "WORKED",
+        ) ||
+        holidays.some(
+          (h) => h.holiday_date === currentWorkDate && !h.is_optional,
+        )
       )
-        await Notifications.dismissAllNotificationsAsync();
+        await dismissWorkNotifications();
       try {
         await native?.syncCutoffs(
           JSON.stringify(

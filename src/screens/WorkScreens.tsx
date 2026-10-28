@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { ShiftType } from "../domain/models";
 import {
@@ -10,9 +10,13 @@ import {
   hours,
   localDate,
   metrics,
-  safeArrival,
-  shiftTarget,
+  workDate,
 } from "../domain/shift";
+import {
+  scheduledMinutes,
+  shiftStartPlan,
+  StartOptions,
+} from "../domain/workSchedule";
 import { DurationControl } from "../features/design/controls";
 import { HolidayRepository } from "../repositories/HolidayRepository";
 import { ShiftRepository } from "../repositories/ShiftRepository";
@@ -50,27 +54,61 @@ export function HomeScreen() {
     review = s.shifts.find((x) => x.status === "NEEDS_REVIEW");
   const breaks = s.breaks.filter((b) => b.shift_id === active?.id);
   const m = active ? metrics(active, breaks, now) : null;
-  const dayTarget = s.settings.useWeeklyTargets
-    ? (s.settings.weekTargets[(new Date(now).getDay() + 6) % 7] ??
-      s.settings.baseline)
-    : s.settings.baseline;
-  const effectiveSettings = {
-    ...s.settings,
-    baseline: dayTarget || s.settings.baseline,
-  };
-  const arrival = safeArrival(
-    now,
-    s.settings.cutoff,
-    shiftTarget(type, effectiveSettings.baseline, Number(custom)),
-    type === "OPEN_ENDED" ? 0 : s.settings.buffer,
-  );
+  useEffect(() => {
+    if (!active) {
+      setType(s.settings.defaultShiftType);
+      setCustom(String(s.settings.baseline));
+    }
+  }, [
+    s.settings.defaultShiftType,
+    s.settings.baseline,
+    s.workProfileRevision,
+    active?.id,
+  ]);
+  const today = active?.work_date ?? workDate(now, s.settings.cutoff);
+  const arrival = shiftStartPlan(now, s.settings, type, Number(custom));
   const muted =
-    s.marks.some((x) => x.work_date === dateKey(now) && x.kind !== "WORKED") ||
-    s.holidays.some((h) => h.holiday_date === dateKey(now) && !h.is_optional);
-  const start = () => {
+    s.marks.some((x) => x.work_date === today && x.kind !== "WORKED") ||
+    s.holidays.some((h) => h.holiday_date === today && !h.is_optional);
+  const start = (options: StartOptions = {}) => {
+    const plan = shiftStartPlan(
+      Date.now(),
+      s.settings,
+      type,
+      Number(custom),
+      options,
+    );
+    if (plan.requiresRestConfirmation) {
+      Alert.alert(
+        "Work on a rest day?",
+        `No hours are scheduled today. Start a ${hours(plan.overrideTarget * 60000)} shift using your daily target?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Start shift",
+            onPress: () => start({ ...options, allowRestDay: true }),
+          },
+        ],
+      );
+      return;
+    }
+    if (plan.exceedsCutoff && !options.allowLateStart) {
+      Alert.alert(
+        "Target is after day reset",
+        `Your target is ${clock(plan.targetAt)}, after the ${clock(plan.cutoff)} reset. This shift will need review at reset. Start anyway?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Start anyway",
+            onPress: () => start({ ...options, allowLateStart: true }),
+          },
+        ],
+      );
+      return;
+    }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     void act(() =>
-      ShiftRepository.start(type, Number(custom), effectiveSettings),
+      ShiftRepository.start(type, Number(custom), s.settings, options),
     );
   };
   const out = () =>
@@ -95,7 +133,7 @@ export function HomeScreen() {
           onPress: () =>
             void act(async () => {
               if (active) await ShiftRepository.complete(active);
-              await HolidayRepository.mark(dateKey(), "LEAVE");
+              await HolidayRepository.mark(today, "LEAVE");
             }),
         },
       ],
@@ -157,9 +195,9 @@ export function HomeScreen() {
             title="Resume work today"
             onPress={() =>
               void act(async () => {
-                await HolidayRepository.mark(dateKey(), null);
+                await HolidayRepository.mark(today, null);
                 const holiday = s.holidays.find(
-                  (h) => h.holiday_date === dateKey(),
+                  (h) => h.holiday_date === today,
                 );
                 if (holiday) await HolidayRepository.remove(holiday.id);
               })
@@ -171,8 +209,11 @@ export function HomeScreen() {
           {!active && (
             <>
               <Label size={12} color={t.cyan}>
-                Swipe in by {clock(arrival.latest)} · Reset{" "}
-                {clock(arrival.cutoff)}
+                {arrival.requiresRestConfirmation
+                  ? "Rest day · No scheduled hours"
+                  : type === "OPEN_ENDED"
+                    ? "Stopwatch · No fixed target"
+                    : `Swipe in by ${clock(arrival.latest)} · Reset ${clock(arrival.cutoff)}`}
               </Label>
               <Chips values={types} value={type} onChange={setType} />
               {type === "CUSTOM" && (
@@ -192,26 +233,26 @@ export function HomeScreen() {
                     ? hours(m.productive)
                     : hours(m.remaining)
                   : hours(
-                      (shiftTarget(
-                        type,
-                        effectiveSettings.baseline,
-                        Number(custom),
-                      ) +
-                        (type === "OPEN_ENDED" ? 0 : s.settings.buffer)) *
-                        60000,
+                      (arrival.requiresRestConfirmation || type === "OPEN_ENDED"
+                        ? 0
+                        : arrival.target + s.settings.buffer) * 60000,
                     )
               }
               label={
-                active?.shift_type === "OPEN_ENDED"
-                  ? "ELAPSED"
-                  : m?.review
-                    ? "NEEDS REVIEW"
-                    : "REMAINING"
+                !active && arrival.requiresRestConfirmation
+                  ? "REST DAY"
+                  : active?.shift_type === "OPEN_ENDED"
+                    ? "ELAPSED"
+                    : m?.review
+                      ? "NEEDS REVIEW"
+                      : "REMAINING"
               }
               sub={
                 active
                   ? `${active.shift_type.replace("_", " ")} · +${active.buffer_minutes}m buffer`
-                  : `${type.replace("_", " ")} · +${type === "OPEN_ENDED" ? 0 : s.settings.buffer}m buffer`
+                  : arrival.requiresRestConfirmation
+                    ? "No scheduled hours"
+                    : `${type.replace("_", " ")} · +${type === "OPEN_ENDED" ? 0 : s.settings.buffer}m buffer`
               }
             />
             {active && m && (
@@ -235,7 +276,11 @@ export function HomeScreen() {
               </>
             )}
             {!active ? (
-              <Button title="Swipe in" disabled={!!review} onPress={start} />
+              <Button
+                title="Swipe in"
+                disabled={!!review}
+                onPress={() => start()}
+              />
             ) : m?.review ? (
               <Button
                 title="Confirm actual swipe out"
@@ -310,13 +355,16 @@ export function CalendarScreen() {
   const [month, setMonth] = useState(
     new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
-  const monday = new Date(now);
+  const currentWorkDay =
+    s.shifts.find((x) => x.status === "ACTIVE")?.work_date ??
+    workDate(now, s.settings.cutoff);
+  const monday = localDate(currentWorkDay);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
   monday.setHours(0, 0, 0, 0);
   const week = s.shifts.filter(
     (x) =>
       localDate(x.work_date) >= monday &&
-      localDate(x.work_date) <= new Date(now),
+      localDate(x.work_date) <= localDate(currentWorkDay),
   );
   const total = week.reduce(
       (sum, x) =>
@@ -351,7 +399,7 @@ export function CalendarScreen() {
             (m) =>
               m.kind === "LEAVE" &&
               localDate(m.work_date) >= monday &&
-              localDate(m.work_date) <= new Date(now),
+              localDate(m.work_date) <= localDate(currentWorkDay),
           ).length
         }{" "}
         leave days this week
@@ -395,13 +443,7 @@ export function CalendarScreen() {
             const shifts = s.shifts.filter((x) => x.work_date === date),
               mark = s.marks.find((x) => x.work_date === date),
               holiday = s.holidays.some((h) => h.holiday_date === date);
-            const weekend = !!(
-              s.settings.weekends &
-              (1 <<
-                (new Date(month.getFullYear(), month.getMonth(), d).getDay() +
-                  6) %
-                  7)
-            );
+            const weekend = scheduledMinutes(s.settings, date) === 0;
             let color = t.muted;
             if (holiday) color = t.purple;
             else if (mark && mark.kind !== "WORKED") color = t.muted;
