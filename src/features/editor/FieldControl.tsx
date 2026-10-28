@@ -268,9 +268,11 @@ export function FieldControl({
           else onChange(v);
         }}
         keyboardType={
-          ["money", "signedMoney", "number", "percent"].includes(spec.type)
-            ? "decimal-pad"
-            : "default"
+          spec.type === "signedMoney"
+            ? "numeric"
+            : ["money", "number", "percent"].includes(spec.type)
+              ? "decimal-pad"
+              : "default"
         }
         multiline={["note", "notes", "message"].includes(spec.key)}
         autoFocus
