@@ -19,6 +19,13 @@ def wait(text,seconds=50):
  raise AssertionError('UI did not show: '+text)
 def tap(text):
  node=wait(text);nums=list(map(int,re.findall(r'\d+',node.get('bounds'))));adb('shell','input','tap',(nums[0]+nums[2])//2,(nums[1]+nums[3])//2);time.sleep(.5)
+def scroll_to(text):
+ w,h=map(int,re.findall(r'\d+',adb('shell','wm','size').decode())[-2:])
+ for _ in range(8):
+  node=locate(text)
+  if node is not None:return node
+  adb('shell','input','swipe',w//2,int(h*.75),w//2,int(h*.3),400);time.sleep(.5)
+ raise AssertionError('UI did not reveal after scrolling: '+text)
 def shot(name):
  time.sleep(1);(out/(name+'.png')).write_bytes(adb('exec-out','screencap','-p'))
  adb('shell','uiautomator','dump','/sdcard/4emp-window.xml');(out/(name+'.xml')).write_bytes(adb('exec-out','cat','/sdcard/4emp-window.xml'))
@@ -49,7 +56,7 @@ try:
  node=next(n for n in dump().iter('node') if n.get('class')=='android.widget.EditText')
  assert node.get('text')=='QA-Pets', 'Emulator failed to enter category name'
  tap('Continue')
- wait('Type');tap('Expense');tap('Continue');wait('Icon');tap('Continue');wait('Color');tap('Choose color #3B82F6');tap('Continue');wait('Review');shot('19-creation-review');tap('Create');wait('Categories');wait('QA-Pets');shot('20-custom-category')
+ wait('Type');tap('Expense');tap('Continue');wait('Icon');tap('Continue');wait('Color');tap('Choose color #3B82F6');tap('Continue');wait('Review');shot('19-creation-review');tap('Create');wait('Categories');scroll_to('QA-Pets');shot('20-custom-category');tap('QA-Pets');wait('Color');shot('20b-saved-category')
  adb('shell','cmd','uimode','night','yes');deep('');wait('TOTAL BALANCE');shot('21-dashboard-dark')
  logs=adb('logcat','-d').decode(errors='replace');(out/'logcat.txt').write_text(logs)
  if 'FATAL EXCEPTION' in logs or 'Unable to resolve module' in logs:raise AssertionError('Runtime crash in logcat')
