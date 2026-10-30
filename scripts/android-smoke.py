@@ -49,7 +49,7 @@ try:
  for _ in range(3):adb('shell','input','swipe',w//2,int(h*.3),w//2,int(h*.8),400)
  tap('Focus timer');wait('Hours');wait('Minutes');shot('15e-focus-timer')
  # Verify a real transaction's safe deletion dialog, then keep the expense for analytics QA.
- deep('transactions');wait('Activity');amount_label=next(n.get('text') for n in dump().iter('node') if '1,234' in n.get('text',''));tap(amount_label);wait('Transaction');scroll_to('Delete entry');tap('Delete entry');wait('Delete this transaction?');shot('15f-safe-delete');tap('Cancel')
+ deep('transactions');wait('Activity');amount_node=next(n for n in dump().iter('node') if '1,234' in (n.get('text','')+' '+n.get('content-desc','')));amount_label=amount_node.get('text') if '1,234' in amount_node.get('text','') else amount_node.get('content-desc');tap(amount_label);wait('Transaction');scroll_to('Delete entry');tap('Delete entry');wait('Delete this transaction?');shot('15f-safe-delete');tap('CANCEL')
  # Validate focused native input screens and a complete multi-screen creation flow.
  deep('edit/settings/baseline');wait('Daily target');wait('Hours');wait('Minutes');shot('16-hours-minutes')
  deep('edit/settings/startOfDay');wait('Preferred start');tap('Choose time');wait('OK');shot('17-native-time-picker');adb('shell','input','keyevent','KEYCODE_BACK')
