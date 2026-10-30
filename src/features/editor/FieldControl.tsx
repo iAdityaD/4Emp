@@ -21,6 +21,8 @@ import { Data, FieldSpec } from "./model";
 const labels: Record<string, string> = {
   GROSS: "Elapsed time",
   NET: "Working time",
+  WORKDAYS: "Workdays",
+  DAYS_OFF: "Leave & days off",
   OFFICE: "Work",
   WFH: "Home",
   HALF_DAY: "Half day",

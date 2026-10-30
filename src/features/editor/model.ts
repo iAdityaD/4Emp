@@ -207,7 +207,6 @@ export const planFields: Record<PlanKind, FieldSpec[]> = {
     f("shift_type", "Shift type", "choice", "business-outline", [
       "OFFICE",
       "CUSTOM",
-      "OPEN_ENDED",
     ]),
     f("cutoff_minute", "Day reset", "time", "moon-outline"),
     f("weekdays", "Workdays", "weekdays", "calendar-outline"),
@@ -258,6 +257,10 @@ export const dueFields = [
   f("due_at", "Date & time", "datetime", "calendar-outline"),
 ];
 export const reminderFields = [
+  f("day_scope", "Applies on", "choice", "sunny-outline", [
+    "WORKDAYS",
+    "DAYS_OFF",
+  ]),
   title,
   f("message", "Message", "text", "chatbubble-outline", undefined, true),
   f("minute", "Time", "time", "time-outline"),
@@ -291,6 +294,13 @@ export const billFields = [
   ]),
 ];
 export const preferenceFields = [
+  f("focusTarget", "Focus duration", "duration", "timer-outline"),
+  f(
+    "focusNotifications",
+    "Focus completion alert",
+    "toggle",
+    "notifications-outline",
+  ),
   f("currency", "Currency", "text", "cash-outline"),
   f("cycleDay", "Cycle starts on", "number", "calendar-outline"),
   f("theme", "Theme", "choice", "moon-outline", ["system", "light", "dark"]),
@@ -303,7 +313,6 @@ export const preferenceFields = [
   f("defaultShiftType", "Default shift", "choice", "business-outline", [
     "OFFICE",
     "CUSTOM",
-    "OPEN_ENDED",
   ]),
   f(
     "shiftWarningMinutes",
@@ -375,7 +384,7 @@ export const wizardKeys: Record<string, string[]> = {
   account: ["name", "account_type", "balance_minor"],
   category: ["name", "kind", "icon_name", "color_hex"],
   worklog: ["first_swipe_in", "last_swipe_out", "shift_type", "target_minutes"],
-  reminder: ["title", "minute", "days"],
+  reminder: ["title", "minute", "day_scope", "days"],
   due: ["title", "due_at"],
 };
 export const lendingFields = [
@@ -542,7 +551,8 @@ export function defaultsFor(entity: Entity, kind?: PlanKind): Data {
     cutoff_minute: s.settings.cutoff,
     weekdays: 127 ^ s.settings.weekends,
     minute: s.settings.startOfDay,
-    days: 127 ^ s.settings.weekends || 127,
+    days: 127,
+    day_scope: "WORKDAYS",
     enabled: true,
     message: "",
   };
@@ -586,6 +596,8 @@ export function formatField(spec: FieldSpec, value: unknown) {
     return new Date(
       String(value) + (spec.type === "date" ? "T12:00:00" : ""),
     ).toLocaleDateString();
+  if (spec.key === "day_scope")
+    return value === "DAYS_OFF" ? "Leave & days off" : "Workdays";
   if (["shift_type", "defaultShiftType"].includes(spec.key))
     return value === "CUSTOM"
       ? "Focus timer"
@@ -712,6 +724,7 @@ export async function saveRecord(
       minute: Number(data.minute),
       days: Number(data.days),
       enabled: !!data.enabled,
+      day_scope: (data.day_scope ?? "WORKDAYS") as "WORKDAYS" | "DAYS_OFF",
     };
     await SettingsRepository.save(
       "reminders",

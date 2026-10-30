@@ -37,6 +37,10 @@ export function syncNotifications(plan: PlannedAlarm[]) {
         name: "Finance reminders",
         importance: Notifications.AndroidImportance.HIGH,
       });
+      await Notifications.setNotificationChannelAsync("focus", {
+        name: "Focus timer",
+        importance: Notifications.AndroidImportance.HIGH,
+      });
       for (const alarm of plan)
         if (alarm.at > Date.now())
           await Notifications.scheduleNotificationAsync({
@@ -58,13 +62,15 @@ export function syncNotifications(plan: PlannedAlarm[]) {
   return serial as Promise<string | null>;
 }
 
-export async function dismissWorkNotifications() {
+export async function dismissWorkNotifications(keepReminderIds: string[] = []) {
   const shown = await Notifications.getPresentedNotificationsAsync().catch(
     () => [],
   );
   for (const notification of shown) {
     const data = notification.request.content.data;
     const id = String(data?.id ?? "");
+    if (keepReminderIds.some((key) => id.startsWith(`reminder-${key}-`)))
+      continue;
     if (
       data?.channel === "work" ||
       (data?.channel == null && /^(shift-|cutoff-|reminder-)/.test(id))

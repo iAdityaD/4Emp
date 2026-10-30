@@ -85,6 +85,7 @@ export interface CalendarMark {
   note: string;
 }
 export interface Reminder {
+  day_scope?: "WORKDAYS" | "DAYS_OFF";
   id: string;
   title: string;
   message: string;
@@ -93,6 +94,8 @@ export interface Reminder {
   enabled: boolean;
 }
 export interface Settings {
+  focusNotifications: boolean;
+  focusTarget: number;
   shiftWarningMinutes: number;
   overtimeMinutes: number;
   baseline: number;
@@ -119,6 +122,8 @@ export interface Settings {
   defaultShiftType: ShiftType;
 }
 export const defaultSettings: Settings = {
+  focusNotifications: true,
+  focusTarget: 25,
   accent: "#00A88A",
   financeReminderMinute: 540,
   hideBalances: false,

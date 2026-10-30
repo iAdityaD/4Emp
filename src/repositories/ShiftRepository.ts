@@ -23,9 +23,14 @@ export const ShiftRepository = {
     settings: Settings,
     options: StartOptions = {},
   ) {
+    if (type === "OPEN_ENDED")
+      throw Error("Stopwatch has been retired. Choose Focus timer.");
+    type = currentMode(type);
     await this.recover();
+    const lane = isFocus(type) ? 1 : 0;
     const existing = await db().getFirstAsync<Shift>(
-      "SELECT * FROM work_shifts WHERE status IN ('ACTIVE','NEEDS_REVIEW')",
+      "SELECT * FROM work_shifts WHERE status IN ('ACTIVE','NEEDS_REVIEW') AND (shift_type IN ('CUSTOM','OPEN_ENDED'))=?",
+      lane,
     );
     if (existing) throw Error("Complete or review the previous shift first");
     type = currentMode(type);
@@ -34,7 +39,8 @@ export const ShiftRepository = {
       throw Error("Choose a swipe-in time in the past");
     if (
       await db().getFirstAsync(
-        "SELECT id FROM work_shifts WHERE first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,?)>?",
+        "SELECT id FROM work_shifts WHERE (shift_type IN ('CUSTOM','OPEN_ENDED'))=? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,?)>?",
+        lane,
         new Date().toISOString(),
         new Date().toISOString(),
         new Date(now).toISOString(),
@@ -44,7 +50,7 @@ export const ShiftRepository = {
     const plan = shiftStartPlan(now, settings, type, custom, options);
     if (plan.requiresRestConfirmation)
       throw Error(
-        "Today is a rest day. Confirm a daily-target override, or choose Custom or Stopwatch.",
+        "Today is a rest day. Confirm a daily-target override, or choose Focus timer.",
       );
     if (plan.exceedsCutoff && !options.allowLateStart)
       throw Error(
@@ -74,6 +80,16 @@ export const ShiftRepository = {
     if (shift.status !== "ACTIVE" || metrics(shift, [], Date.now()).review)
       throw Error("This shift needs review");
     await db().withExclusiveTransactionAsync(async (tx) => {
+      const current = await tx.getFirstAsync<Shift>(
+        "SELECT * FROM work_shifts WHERE id=?",
+        shift.id,
+      );
+      if (
+        !current ||
+        current.status !== "ACTIVE" ||
+        metrics(current, [], Date.now()).review
+      )
+        throw Error("This session has ended");
       const open = await tx.getFirstAsync<Break>(
         "SELECT * FROM shift_breaks WHERE shift_id=? AND break_end IS NULL",
         shift.id,
@@ -136,8 +152,9 @@ export const ShiftRepository = {
       ? dateKey(start)
       : workDate(start, cutoffMinute);
     const other = await db().getFirstAsync<Shift>(
-      "SELECT * FROM work_shifts WHERE id<>? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,'9999-12-31T23:59:59Z')>?",
+      "SELECT * FROM work_shifts WHERE id<>? AND (shift_type IN ('CUSTOM','OPEN_ENDED'))=? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,'9999-12-31T23:59:59Z')>?",
       shift.id,
+      focus ? 1 : 0,
       new Date(
         end ??
           (Number.isFinite(correctedCutoff) ? correctedCutoff : Date.now()),
@@ -191,7 +208,8 @@ export const ShiftRepository = {
     await db().withExclusiveTransactionAsync(async (tx) => {
       if (
         await tx.getFirstAsync(
-          "SELECT id FROM work_shifts WHERE first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,'9999-12-31T23:59:59Z')>?",
+          "SELECT id FROM work_shifts WHERE (shift_type IN ('CUSTOM','OPEN_ENDED'))=? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,'9999-12-31T23:59:59Z')>?",
+          isFocus(type) ? 1 : 0,
           new Date(end).toISOString(),
           new Date(start).toISOString(),
         )

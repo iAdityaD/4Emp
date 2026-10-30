@@ -130,7 +130,7 @@ it("focus starts even on leave without swipes or a workday reset warning", async
   const s = render(<HomeScreen />);
   fireEvent.press(s.getByRole("button", { name: "Focus timer" }));
   await act(async () => fireEvent.press(s.getByText("Start timer")));
-  expect(start).toHaveBeenCalledWith("CUSTOM", 510, expect.any(Object), {
+  expect(start).toHaveBeenCalledWith("CUSTOM", 25, expect.any(Object), {
     startedAt: undefined,
   });
   expect(s.queryByText("Swipe in")).toBeNull();

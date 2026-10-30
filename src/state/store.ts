@@ -1,3 +1,4 @@
+import { isFocus } from "../domain/workModes";
 import { userMessage } from "../domain/errors";
 import { create } from "zustand";
 import {
@@ -124,8 +125,8 @@ export const useStore = create<State>((set, get) => ({
         ready: true,
       });
       const currentWorkDate =
-        shifts.find((s) => s.status === "ACTIVE")?.work_date ??
-        workDate(Date.now(), settings.cutoff);
+        shifts.find((s) => s.status === "ACTIVE" && !isFocus(s.shift_type))
+          ?.work_date ?? workDate(Date.now(), settings.cutoff);
       if (
         marks.some(
           (m) => m.work_date === currentWorkDate && m.kind !== "WORKED",
@@ -134,7 +135,11 @@ export const useStore = create<State>((set, get) => ({
           (h) => h.holiday_date === currentWorkDate && !h.is_optional,
         )
       )
-        await dismissWorkNotifications();
+        await dismissWorkNotifications(
+          settings.reminders
+            .filter((r) => r.day_scope === "DAYS_OFF")
+            .map((r) => r.id),
+        );
       try {
         await native?.syncCutoffs(
           JSON.stringify(
@@ -169,7 +174,10 @@ export const useStore = create<State>((set, get) => ({
         );
         const prioritized = [
           ...workAlarms.filter(
-            (a) => a.id.startsWith("shift-") || a.id.startsWith("cutoff-"),
+            (a) =>
+              a.id.startsWith("focus-") ||
+              a.id.startsWith("shift-") ||
+              a.id.startsWith("cutoff-"),
           ),
           ...(settings.notifications && settings.financeNotifications
             ? financeAlarms

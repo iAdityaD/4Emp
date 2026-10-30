@@ -6,9 +6,10 @@ import {
   Holiday,
 } from "../domain/models";
 import { scheduledMinutes } from "../domain/workSchedule";
+import { isFocus } from "../domain/workModes";
 import { metrics, clock, dateKey, workDate } from "../domain/shift";
 export interface PlannedAlarm {
-  channel?: "work" | "finance";
+  channel?: "work" | "finance" | "focus";
   id: string;
   at: number;
   title: string;
@@ -22,37 +23,51 @@ export function notificationPlan(
   holidays: Holiday[],
   now: number,
 ): PlannedAlarm[] {
-  if (!settings.notifications || !settings.workNotifications) return [];
-  const muted = new Set([
-    ...marks.filter((m) => m.kind !== "WORKED").map((m) => m.work_date),
-    ...holidays.filter((h) => !h.is_optional).map((h) => h.holiday_date),
-  ]);
+  if (!settings.notifications) return [];
+  const workShifts = shifts.filter((s) => !isFocus(s.shift_type));
+  const isWorkday = (day: string) => {
+    const mark = marks.find((m) => m.work_date === day);
+    if (mark) return mark.kind === "WORKED";
+    if (holidays.some((h) => h.holiday_date === day && !h.is_optional))
+      return false;
+    return (
+      workShifts.some((s) => s.work_date === day) ||
+      scheduledMinutes(settings, day) > 0
+    );
+  };
+  const muted = (day: string) =>
+    marks.some((m) => m.work_date === day && m.kind !== "WORKED") ||
+    (marks.find((m) => m.work_date === day)?.kind !== "WORKED" &&
+      holidays.some((h) => h.holiday_date === day && !h.is_optional));
   const plan: PlannedAlarm[] = [];
-  const push = (
-    alarm: PlannedAlarm,
-    day = workDate(alarm.at, settings.cutoff),
-    focus = false,
-  ) => {
-    if (alarm.at > now && (focus || !muted.has(day))) plan.push(alarm);
+  const push = (a: PlannedAlarm) => {
+    if (a.at > now) plan.push(a);
   };
   for (const s of shifts.filter((s) => s.status === "ACTIVE")) {
-    if (
-      muted.has(s.work_date) &&
-      s.shift_type !== "CUSTOM" &&
-      s.shift_type !== "OPEN_ENDED"
-    )
-      continue;
     const m = metrics(
       s,
       breaks.filter((b) => b.shift_id === s.id),
       now,
     );
-    if (
-      s.shift_type !== "OPEN_ENDED" &&
-      !m.review &&
-      !(s.tracking_mode === "NET" && m.breakActive)
-    ) {
-      const cutoff = s.cutoff_at ? Date.parse(s.cutoff_at) : Infinity;
+    if (isFocus(s.shift_type)) {
+      if (
+        settings.focusNotifications &&
+        s.shift_type === "CUSTOM" &&
+        !m.breakActive &&
+        !m.review
+      )
+        push({
+          channel: "focus",
+          id: `focus-${s.id}-target`,
+          at: m.target,
+          title: "Focus complete",
+          body: "Your focus timer is complete.",
+        });
+      continue;
+    }
+    if (!settings.workNotifications || muted(s.work_date)) continue;
+    const cutoff = s.cutoff_at ? Date.parse(s.cutoff_at) : Infinity;
+    if (!m.review && !(s.tracking_mode === "NET" && m.breakActive)) {
       for (const [name, offset, title, body] of [
         [
           "warning",
@@ -63,14 +78,8 @@ export function notificationPlan(
         [
           "target",
           0,
-          s.shift_type === "CUSTOM"
-            ? "Focus complete"
-            : s.shift_type === "WFH"
-              ? "Work target reached"
-              : "Safe to swipe out",
-          s.shift_type === "CUSTOM"
-            ? "Your focus timer is complete."
-            : `Work target completed. +${s.buffer_minutes}m buffer included.`,
+          s.shift_type === "WFH" ? "Work target reached" : "Safe to swipe out",
+          `Work target completed. +${s.buffer_minutes}m buffer included.`,
         ],
         [
           "overtime",
@@ -81,64 +90,66 @@ export function notificationPlan(
       ] as const)
         if (
           (name !== "warning" || settings.shiftWarningMinutes > 0) &&
-          (name !== "overtime" ||
-            (settings.overtimeMinutes > 0 && s.shift_type !== "CUSTOM")) &&
+          (name !== "overtime" || settings.overtimeMinutes > 0) &&
           m.target + offset <= cutoff
         )
-          push(
-            {
-              id: `shift-${s.id}-${name}`,
-              at: m.target + offset,
-              title,
-              body,
-            },
-            s.work_date,
-            s.shift_type === "CUSTOM",
-          );
+          push({
+            channel: "work",
+            id: `shift-${s.id}-${name}`,
+            at: m.target + offset,
+            title,
+            body,
+          });
     }
-    if (s.shift_type !== "OPEN_ENDED" && s.cutoff_at)
-      push(
-        {
-          id: `cutoff-${s.id}`,
-          at: Date.parse(s.cutoff_at),
-          title: "Shift needs review",
-          body: "The company day has reset. Confirm your actual swipe-out time when you return.",
-        },
-        s.work_date,
-      );
+    if (s.cutoff_at)
+      push({
+        channel: "work",
+        id: `cutoff-${s.id}`,
+        at: cutoff,
+        title: "Shift needs review",
+        body: "Confirm your actual swipe-out time when you return.",
+      });
   }
-  // OS-owned one-shot requests. Refilled on launch/resume/settings changes, capped for iOS.
-  for (let d = 0; d < 28; d++)
-    for (const reminder of settings.reminders.filter((r) => r.enabled)) {
-      const at = new Date(now);
-      at.setDate(at.getDate() + d);
-      at.setHours(Math.floor(reminder.minute / 60), reminder.minute % 60, 0, 0);
-      const owner = shifts.find(
-        (s) =>
-          s.status === "ACTIVE" &&
-          Date.parse(s.first_swipe_in) <= at.getTime() &&
-          s.cutoff_at &&
-          at.getTime() < Date.parse(s.cutoff_at),
-      );
-      const reminderDay =
-        owner?.work_date ?? workDate(at.getTime(), settings.cutoff);
-      if (
-        scheduledMinutes(settings, reminderDay) === 0 &&
-        !shifts.some((s) => s.work_date === reminderDay) &&
-        !marks.some((m) => m.work_date === reminderDay && m.kind === "WORKED")
-      )
-        continue;
-      const isoDay = (new Date(reminderDay + "T12:00:00").getDay() + 6) % 7;
-      if (reminder.days & (1 << isoDay))
-        push(
-          {
+  if (settings.workNotifications)
+    for (let d = 0; d < 28; d++)
+      for (const reminder of settings.reminders.filter((r) => r.enabled)) {
+        const at = new Date(now);
+        at.setDate(at.getDate() + d);
+        at.setHours(
+          Math.floor(reminder.minute / 60),
+          reminder.minute % 60,
+          0,
+          0,
+        );
+        const owner = workShifts.find(
+          (s) =>
+            s.status === "ACTIVE" &&
+            Date.parse(s.first_swipe_in) <= at.getTime() &&
+            s.cutoff_at &&
+            at.getTime() < Date.parse(s.cutoff_at),
+        );
+        const day = owner?.work_date ?? workDate(at.getTime(), settings.cutoff);
+        const working = isWorkday(day);
+        if (
+          (reminder.day_scope ?? "WORKDAYS") === "WORKDAYS" ? !working : working
+        )
+          continue;
+        const isoDay = (new Date(day + "T12:00:00").getDay() + 6) % 7;
+        if (reminder.days & (1 << isoDay))
+          push({
+            channel: "work",
             id: `reminder-${reminder.id}-${dateKey(at)}`,
             at: at.getTime(),
             title: reminder.title,
             body: reminder.message,
-          },
-          reminderDay,
-        );
-    }
-  return plan.sort((a, b) => a.at - b.at).slice(0, 60);
+          });
+      }
+  // Active timers have priority over optional day schedules within the OS request budget.
+  return plan
+    .sort(
+      (a, b) =>
+        Number(a.id.startsWith("reminder-")) -
+          Number(b.id.startsWith("reminder-")) || a.at - b.at,
+    )
+    .slice(0, 60);
 }

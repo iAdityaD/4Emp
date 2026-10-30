@@ -39,10 +39,10 @@ try:
  tap('Expense');wait('New entry')
  for key in ['1','2','3','4']:tap(key)
  tap('Save entry');wait('TOTAL BALANCE');shot('03-recorded-expense')
- for path,title,name in [('transactions','Activity','04-transactions'),('plan','Plan','05-planning'),('salary','Salary','06-salary'),('loans','Loans & EMIs','07-loans'),('subscriptions','Subscriptions','08-subscriptions'),('budgets','Monthly budgets','09-budgets'),('goals','Savings goals','10-goals'),('finance-calendar','Money calendar','11-calendar'),('work','Your workday','12-work'),('work-settings','Work settings','13-work-settings'),('insights','Insights','14-insights'),('more','Settings','15-more'),('lending','Lending','15b-lending'),('salary-rules','Salary','15c-salary-rules')]:
+ for path,title,name in [('transactions','Activity','04-transactions'),('plan','Plan','05-planning'),('salary','Salary','06-salary'),('loans','Loans & EMIs','07-loans'),('subscriptions','Subscriptions','08-subscriptions'),('budgets','Monthly budgets','09-budgets'),('goals','Savings goals','10-goals'),('finance-calendar','Money calendar','11-calendar'),('work','Your workday','12-work'),('work-settings','Work settings','13-work-settings'),('work-analytics','Work & focus','13b-work-analytics'),('work-schedule','Work schedule','13c-work-schedule'),('insights','Insights','14-insights'),('more','Settings','15-more'),('lending','Lending','15b-lending'),('salary-rules','Salary','15c-salary-rules')]:
   deep(path);wait(title);shot(name)
  # Verify simplified work modes and missed swipe-in native time entry.
- deep('work');wait('Your workday');wait('Focus timer');wait('Stopwatch')
+ deep('work');wait('Your workday');wait('Focus timer');assert locate('Stopwatch') is None
  assert locate('WFH') is None and locate('HALF DAY') is None, 'Deprecated work modes remain selectable'
  scroll_to('Missed swipe in?');tap('Missed swipe in?');scroll_to('Choose time');tap('Choose time');wait('OK');shot('15d-missed-swipe-time');adb('shell','input','keyevent','KEYCODE_BACK')
  w,h=map(int,re.findall(r'\d+',adb('shell','wm','size').decode())[-2:])

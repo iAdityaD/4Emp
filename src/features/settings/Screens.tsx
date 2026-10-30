@@ -180,22 +180,9 @@ export function MoneyPreferencesScreen() {
 }
 export function NotificationsScreen() {
   const s = useStore(),
-    router = useRouter(),
-    [tab, setTab] = useState("FINANCE"),
-    nav = useNav();
+    router = useRouter();
   return (
-    <Page
-      title="Notifications"
-      trailing={
-        tab === "WORK" ? (
-          <IconButton
-            icon="add"
-            label="Add work reminder"
-            onPress={() => router.push("/work-reminder")}
-          />
-        ) : undefined
-      }
-    >
+    <Page title="Notifications">
       <Card>
         <Toggle
           label="All alerts"
@@ -229,61 +216,24 @@ export function NotificationsScreen() {
           />
         )}
       </Card>
-      <Chips
-        values={["FINANCE", "WORK"]}
-        labels={{ FINANCE: "Money", WORK: "Work" }}
-        value={tab}
-        onChange={setTab}
-      />
-      {tab === "FINANCE" ? (
-        <Card>
-          <Toggle
-            label="Finance alerts"
-            value={s.settings.financeNotifications}
-            onChange={(v) => void s.configure("financeNotifications", v)}
-          />
-          <MenuRow
-            title="Alert time"
-            icon="alarm-outline"
-            value={durationText(s.settings.financeReminderMinute)}
-            onPress={() =>
-              openField(router, "settings", "financeReminderMinute")
-            }
-          />
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <Toggle
-              label="Work alerts"
-              value={s.settings.workNotifications}
-              onChange={(v) => void s.configure("workNotifications", v)}
-            />
-          </Card>
-          {s.settings.reminders.map((r) => (
-            <Card key={r.id}>
-              <MenuRow
-                title={r.title}
-                icon={
-                  r.id === "timesheet"
-                    ? "document-text-outline"
-                    : "cafe-outline"
-                }
-                value={`${durationText(r.minute)} · ${r.enabled ? "On" : "Off"}`}
-                onPress={() =>
-                  router.push({
-                    pathname: "/work-reminder",
-                    params: { id: r.id },
-                  })
-                }
-              />
-            </Card>
-          ))}
-          {!s.settings.reminders.length && (
-            <Label muted>No work reminders</Label>
-          )}
-        </>
-      )}
+      <Card>
+        <Toggle
+          label="Finance alerts"
+          value={s.settings.financeNotifications}
+          onChange={(v) => void s.configure("financeNotifications", v)}
+        />
+        <MenuRow
+          title="Alert time"
+          icon="alarm-outline"
+          value={durationText(s.settings.financeReminderMinute)}
+          onPress={() => openField(router, "settings", "financeReminderMinute")}
+        />
+        <Toggle
+          label="Focus completion alert"
+          value={s.settings.focusNotifications}
+          onChange={(v) => void s.configure("focusNotifications", v)}
+        />
+      </Card>
     </Page>
   );
 }

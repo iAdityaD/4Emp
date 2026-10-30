@@ -2,6 +2,8 @@ import { z } from "zod";
 import { defaultSettings, Settings } from "./models";
 const minute = z.number().int().min(0).max(1439);
 export const settingsSchema = z.object({
+  focusNotifications: z.boolean().default(true),
+  focusTarget: z.number().int().min(1).max(1440).default(25),
   baseline: z.number().int().min(1).max(1440),
   buffer: z.number().int().min(0).max(60),
   cutoff: minute,
@@ -25,6 +27,7 @@ export const settingsSchema = z.object({
         minute,
         days: z.number().int().min(1).max(127),
         enabled: z.boolean(),
+        day_scope: z.enum(["WORKDAYS", "DAYS_OFF"]).default("WORKDAYS"),
       }),
     )
     .max(50),

@@ -82,6 +82,12 @@ CREATE INDEX idx_lending_account ON lending(account_id);
 CREATE INDEX idx_lending_repayment ON lending_repayments(lending_id,payment_date);
 UPDATE app_settings SET value='"OFFICE"' WHERE key='defaultShiftType' AND value IN ('"WFH"','"HALF_DAY"');
 UPDATE work_profiles SET shift_type='OFFICE' WHERE shift_type IN ('WFH','HALF_DAY');`,
+  `DROP INDEX idx_single_active;
+UPDATE work_shifts SET cutoff_at=NULL WHERE status='ACTIVE' AND shift_type IN ('CUSTOM','OPEN_ENDED');
+CREATE UNIQUE INDEX idx_active_work ON work_shifts((1)) WHERE status='ACTIVE' AND shift_type NOT IN ('CUSTOM','OPEN_ENDED');
+CREATE UNIQUE INDEX idx_active_focus ON work_shifts((1)) WHERE status='ACTIVE' AND shift_type IN ('CUSTOM','OPEN_ENDED');
+UPDATE app_settings SET value='"OFFICE"' WHERE key='defaultShiftType' AND value='"OPEN_ENDED"';
+UPDATE work_profiles SET shift_type='OFFICE' WHERE shift_type='OPEN_ENDED';`,
 ];
 export const backupTables = [
   "app_settings",

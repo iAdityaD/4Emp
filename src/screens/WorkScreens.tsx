@@ -53,25 +53,31 @@ export function HomeScreen() {
   const [type, setType] = useState<ShiftType>(
       currentMode(s.settings.defaultShiftType),
     ),
-    [custom, setCustom] = useState(String(s.settings.baseline)),
+    [custom, setCustom] = useState(String(s.settings.focusTarget)),
     [startedAt, setStartedAt] = useState<string | null>(null),
     [showStart, setShowStart] = useState(false);
   const router = useRouter();
-  const active = s.shifts.find((x) => x.status === "ACTIVE"),
-    review = s.shifts.find((x) => x.status === "NEEDS_REVIEW");
+  const workActive = s.shifts.find(
+      (x) => x.status === "ACTIVE" && !isFocus(x.shift_type),
+    ),
+    focusActive = s.shifts.find(
+      (x) => x.status === "ACTIVE" && isFocus(x.shift_type),
+    ),
+    active = isFocus(type) ? focusActive : workActive,
+    review = s.shifts.find(
+      (x) =>
+        x.status === "NEEDS_REVIEW" && isFocus(x.shift_type) === isFocus(type),
+    );
   const breaks = s.breaks.filter((b) => b.shift_id === active?.id);
   const m = active ? metrics(active, breaks, now) : null;
   useEffect(() => {
-    if (!active) {
+    if (!workActive && !focusActive) {
       setType(currentMode(s.settings.defaultShiftType));
-      setCustom(String(s.settings.baseline));
     }
-  }, [
-    s.settings.defaultShiftType,
-    s.settings.baseline,
-    s.workProfileRevision,
-    active?.id,
-  ]);
+  }, [s.settings.defaultShiftType, s.workProfileRevision]);
+  useEffect(() => {
+    if (!focusActive) setCustom(String(s.settings.focusTarget));
+  }, [s.settings.focusTarget, focusActive?.id]);
   const today = active?.work_date ?? workDate(now, s.settings.cutoff);
   const arrival = shiftStartPlan(
     startedAt ? Date.parse(startedAt) : now,
@@ -178,8 +184,16 @@ export function HomeScreen() {
         </Label>
         <Row>
           <Pressable
-            accessibilityLabel="Open work calendar"
-            onPress={() => nav.navigate("Calendar")}
+            accessibilityLabel="Work and focus analytics"
+            onPress={() => nav.navigate("WorkAnalytics")}
+            style={{ padding: 12 }}
+          >
+            <Ionicons name="stats-chart-outline" color={t.cyan} size={22} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Work schedule"
+            onPress={() => nav.navigate("WorkSchedule")}
             style={{ padding: 12 }}
           >
             <Ionicons name="calendar-outline" color={t.cyan} size={22} />
@@ -212,7 +226,7 @@ export function HomeScreen() {
           />
         </Card>
       )}
-      {!active && (
+      {
         <Chips
           values={types}
           labels={workModeLabels}
@@ -223,6 +237,24 @@ export function HomeScreen() {
             setShowStart(false);
           }}
         />
+      }
+      {(workActive || focusActive) && (
+        <Row>
+          <Label size={12} color={workActive ? t.accent : t.muted}>
+            {workActive ? "Work running" : "Work not started"}
+          </Label>
+          <Label size={12} color={focusActive ? t.cyan : t.muted}>
+            {focusActive
+              ? metrics(
+                  focusActive,
+                  s.breaks.filter((b) => b.shift_id === focusActive.id),
+                  now,
+                ).breakActive
+                ? "Focus paused"
+                : "Focus running"
+              : "Focus not started"}
+          </Label>
+        </Row>
       )}
       {muted ? (
         <Card>
@@ -377,10 +409,16 @@ export function HomeScreen() {
                   }
                   onPress={out}
                 />
-                {isFocus(active.shift_type) && (
+                {(isFocus(active.shift_type) || m?.breakActive) && (
                   <Button
                     secondary
-                    title={m?.breakActive ? "End break" : "Start break"}
+                    title={
+                      isFocus(active.shift_type)
+                        ? m?.breakActive
+                          ? "Resume focus"
+                          : "Pause focus"
+                        : "End break"
+                    }
                     onPress={() =>
                       void act(() => ShiftRepository.toggleBreak(active))
                     }
@@ -448,8 +486,8 @@ export function CalendarScreen() {
     new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const currentWorkDay =
-    s.shifts.find((x) => x.status === "ACTIVE")?.work_date ??
-    workDate(now, s.settings.cutoff);
+    s.shifts.find((x) => x.status === "ACTIVE" && !isFocus(x.shift_type))
+      ?.work_date ?? workDate(now, s.settings.cutoff);
   const monday = localDate(currentWorkDay);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
   monday.setHours(0, 0, 0, 0);
@@ -648,7 +686,9 @@ export function DayDetailsScreen() {
               return;
             }
             if (
-              shifts.some((x) => x.status === "ACTIVE") &&
+              shifts.some(
+                (x) => x.status === "ACTIVE" && !isFocus(x.shift_type),
+              ) &&
               kind !== "WORKED" &&
               kind !== "CLEAR"
             ) {

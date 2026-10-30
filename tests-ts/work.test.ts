@@ -134,17 +134,15 @@ test("rest days stay at zero until a confirmed or custom override", async (t) =>
   sql.close();
 });
 
-test("custom and stopwatch shifts remain available on all seven days", async (t) => {
+test("focus remains available on rest days and new stopwatch sessions are retired", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: at(24) });
   const sql = testDatabase();
   await ShiftRepository.start("CUSTOM", 180, weekly);
   assert.equal((await ShiftRepository.all())[0]!.target_minutes, 180);
   await ShiftRepository.complete((await ShiftRepository.all())[0]!);
-  await ShiftRepository.start("OPEN_ENDED", 0, weekly);
-  assert.equal(
-    (await ShiftRepository.all()).find((s) => s.status === "ACTIVE")!
-      .target_minutes,
-    0,
+  await assert.rejects(
+    () => ShiftRepository.start("OPEN_ENDED", 0, weekly),
+    /retired/,
   );
   sql.close();
 });
@@ -386,5 +384,96 @@ test("work reminders skip zero-hour days unless the employee explicitly works th
       [],
       now,
     ).some((a) => a.id === id),
+  );
+});
+
+test("work and focus run together; focus pauses and work completion remain isolated", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: at(19) });
+  const sql = testDatabase();
+  await ShiftRepository.start("OFFICE", 0, weekly);
+  await ShiftRepository.start("CUSTOM", 25, weekly);
+  let rows = await ShiftRepository.all();
+  const work = rows.find((s) => s.shift_type === "OFFICE")!;
+  const focus = rows.find((s) => s.shift_type === "CUSTOM")!;
+  assert.equal(rows.filter((s) => s.status === "ACTIVE").length, 2);
+  await assert.rejects(
+    () => ShiftRepository.start("OFFICE", 0, weekly),
+    /previous/,
+  );
+  await assert.rejects(
+    () => ShiftRepository.start("CUSTOM", 25, weekly),
+    /previous/,
+  );
+  t.mock.timers.setTime(at(19, 9, 14));
+  await ShiftRepository.toggleBreak(focus);
+  const pauses = await ShiftRepository.breaks();
+  assert.equal(pauses[0]!.shift_id, focus.id);
+  assert.equal(metrics(work, [], Date.now()).gross, 10 * 60000);
+  const alarms = notificationPlan(rows, pauses, weekly, [], [], Date.now());
+  assert.ok(alarms.some((a) => a.id === `shift-${work.id}-target`));
+  assert.ok(!alarms.some((a) => a.id.startsWith("focus-")));
+  await ShiftRepository.complete(work);
+  rows = await ShiftRepository.all();
+  assert.equal(rows.find((s) => s.id === focus.id)!.status, "ACTIVE");
+  t.mock.timers.setTime(at(19, 9, 24));
+  await ShiftRepository.toggleBreak(focus);
+  const resumed = notificationPlan(
+    rows,
+    await ShiftRepository.breaks(),
+    weekly,
+    [],
+    [],
+    Date.now(),
+  );
+  assert.equal(
+    resumed.find((a) => a.id === `focus-${focus.id}-target`)!.at,
+    at(19, 9, 39),
+  );
+  assert.ok(!resumed.some((a) => a.id.startsWith("shift-")));
+  await assert.rejects(() => ShiftRepository.toggleBreak(work), /ended/);
+  sql.close();
+});
+
+test("leave suppresses work schedules but retains focus and days-off schedules", () => {
+  const now = at(19, 9, 0);
+  const focus: Shift = {
+    ...sample(now, 25),
+    id: "focus",
+    shift_type: "CUSTOM",
+    tracking_mode: "NET",
+    cutoff_at: null,
+  };
+  const reminders = ["WORKDAYS", "DAYS_OFF"].map((scope) => ({
+    id: scope,
+    title: scope,
+    message: "",
+    minute: 600,
+    days: 127,
+    enabled: true,
+    day_scope: scope as "WORKDAYS" | "DAYS_OFF",
+  }));
+  const marks = [{ work_date: "2026-10-19", kind: "LEAVE" as const, note: "" }];
+  const plan = notificationPlan(
+    [focus],
+    [],
+    { ...weekly, reminders },
+    marks,
+    [],
+    now,
+  );
+  assert.ok(plan.some((a) => a.id === "focus-focus-target"));
+  assert.ok(plan.some((a) => a.id === "reminder-DAYS_OFF-2026-10-19"));
+  assert.ok(!plan.some((a) => a.id === "reminder-WORKDAYS-2026-10-19"));
+  const focusOnly = notificationPlan(
+    [focus],
+    [],
+    { ...weekly, reminders, workNotifications: false },
+    marks,
+    [],
+    now,
+  );
+  assert.deepEqual(
+    focusOnly.map((a) => a.channel),
+    ["focus"],
   );
 });

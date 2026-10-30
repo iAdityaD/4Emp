@@ -111,7 +111,7 @@ const destinations: Record<string, string> = {
   profiles: "/work-profiles",
   account: "/accounts",
   category: "/categories",
-  reminder: "/notifications",
+  reminder: "/work-schedule",
   worklog: "/work-calendar",
   bill: "/commitments",
   due: "/reminders",

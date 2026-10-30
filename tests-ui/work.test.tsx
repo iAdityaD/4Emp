@@ -95,7 +95,7 @@ it("rest days keep the ring at zero and require confirmation before a normal shi
   await act(async () => {
     buttons.find((b) => b.text === "Start shift")!.onPress?.();
   });
-  expect(start).toHaveBeenCalledWith("OFFICE", 540, expect.any(Object), {
+  expect(start).toHaveBeenCalledWith("OFFICE", 25, expect.any(Object), {
     allowRestDay: true,
     startedAt: undefined,
   });
@@ -114,7 +114,7 @@ it("late starts use an existing confirmation dialog before writing a shift", asy
       (b) => b.text === "Start anyway",
     )!.onPress?.();
   });
-  expect(start).toHaveBeenCalledWith("OFFICE", 540, expect.any(Object), {
+  expect(start).toHaveBeenCalledWith("OFFICE", 25, expect.any(Object), {
     allowLateStart: true,
     startedAt: undefined,
   });
@@ -133,6 +133,7 @@ it("custom rest-day work is explicit and needs no normal-target override", async
   const s = render(<HomeScreen />);
   fireEvent.press(s.getByRole("button", { name: "Focus timer" }));
   fireEvent.changeText(s.getByLabelText("Hours"), "3");
+  fireEvent.changeText(s.getByLabelText("Minutes"), "0");
   await act(async () => {
     fireEvent.press(s.getByText("Start timer"));
   });
@@ -250,4 +251,43 @@ it("declaring leave dismisses work notifications without clearing finance alerts
   expect(Notifications.dismissNotificationAsync).not.toHaveBeenCalledWith(
     "budget",
   );
+});
+
+it("switching modes keeps independent live controls and removes Stopwatch", async () => {
+  const base = {
+    work_date: "2026-10-19",
+    target_minutes: 25,
+    buffer_minutes: 0,
+    first_swipe_in: new Date().toISOString(),
+    last_swipe_out: null,
+    status: "ACTIVE" as const,
+    notes: null,
+    created_at: Date.now(),
+    cutoff_at: null,
+  };
+  const work = {
+    ...base,
+    id: "work",
+    shift_type: "OFFICE" as const,
+    tracking_mode: "GROSS" as const,
+  };
+  const focus = {
+    ...base,
+    id: "focus",
+    shift_type: "CUSTOM" as const,
+    tracking_mode: "NET" as const,
+  };
+  useStore.setState({ shifts: [work, focus] });
+  const pause = jest.spyOn(ShiftRepository, "toggleBreak").mockResolvedValue();
+  const s = render(<HomeScreen />);
+  expect(s.getByText("Swipe out")).toBeTruthy();
+  expect(s.queryByText("Stopwatch")).toBeNull();
+  expect(s.getByLabelText("Work and focus analytics")).toBeTruthy();
+  expect(s.getByLabelText("Work schedule")).toBeTruthy();
+  fireEvent.press(s.getByRole("button", { name: "Focus timer" }));
+  expect(s.getByText("Stop timer")).toBeTruthy();
+  await act(async () => fireEvent.press(s.getByText("Pause focus")));
+  expect(pause).toHaveBeenCalledWith(focus);
+  fireEvent.press(s.getByRole("button", { name: "Work" }));
+  expect(s.getByText("Swipe out")).toBeTruthy();
 });

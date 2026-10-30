@@ -1,5 +1,5 @@
 import { ShiftType } from "./models";
-export const workModes: ShiftType[] = ["OFFICE", "CUSTOM", "OPEN_ENDED"];
+export const workModes: ShiftType[] = ["OFFICE", "CUSTOM"];
 export const workModeLabels: Partial<Record<ShiftType, string>> = {
   OFFICE: "Work",
   CUSTOM: "Focus timer",
@@ -8,6 +8,8 @@ export const workModeLabels: Partial<Record<ShiftType, string>> = {
   HALF_DAY: "Work",
 };
 export const currentMode = (type: ShiftType): ShiftType =>
-  type === "WFH" || type === "HALF_DAY" ? "OFFICE" : type;
+  type === "WFH" || type === "HALF_DAY" || type === "OPEN_ENDED"
+    ? "OFFICE"
+    : type;
 export const isFocus = (type: ShiftType) =>
   type === "CUSTOM" || type === "OPEN_ENDED";

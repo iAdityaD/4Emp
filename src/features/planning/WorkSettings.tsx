@@ -39,6 +39,20 @@ export function WorkSettingsScreen() {
           onPress={() => openField(router, "settings", "defaultShiftType")}
         />
       </Card>
+      <Section title="Focus" />
+      <Card>
+        <MenuRow
+          title="Focus duration"
+          value={durationText(s.settings.focusTarget)}
+          icon="timer-outline"
+          onPress={() => openField(router, "settings", "focusTarget")}
+        />
+        <Toggle
+          label="Focus completion alert"
+          value={s.settings.focusNotifications}
+          onChange={(v) => void s.configure("focusNotifications", v)}
+        />
+      </Card>
       <Section title="Schedule" />
       <Card>
         <MenuRow
