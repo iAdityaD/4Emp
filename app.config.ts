@@ -3,7 +3,7 @@ const config: ExpoConfig = {
   name: "4Employee",
   scheme: "fouremp",
   slug: "4employee",
-  version: "3.1.1",
+  version: "3.2.0",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "automatic",
@@ -14,7 +14,7 @@ const config: ExpoConfig = {
       backgroundColor: "#0F1115",
     },
     package: "com.fouremp.app",
-    versionCode: 7,
+    versionCode: 8,
     allowBackup: false,
     permissions: [
       "POST_NOTIFICATIONS",

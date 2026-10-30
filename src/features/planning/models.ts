@@ -49,6 +49,10 @@ export interface EMIPayment {
   transaction_id: string | null;
 }
 export interface Subscription {
+  end_date?: string | null;
+  auto_post?: number;
+  payment_type?: "EXPENSE" | "TRANSFER";
+  destination_account_id?: string | null;
   id: string;
   title: string;
   amount_minor: number;
@@ -61,6 +65,7 @@ export interface Subscription {
   is_active: number;
 }
 export interface Budget {
+  reset_at?: string | null;
   id: string;
   category_id: string;
   month: string;
@@ -68,6 +73,8 @@ export interface Budget {
   alert_percent: number;
 }
 export interface Goal {
+  tracking_basis?: "CONTRIBUTIONS" | "BALANCE" | "MONTHLY_SAVINGS";
+  account_id?: string | null;
   id: string;
   title: string;
   target_minor: number;
@@ -107,7 +114,27 @@ export interface WorkProfile {
   cutoff_minute: number;
   weekdays: number;
 }
+export interface Lending {
+  id: string;
+  title: string;
+  amount_minor: number;
+  account_id: string;
+  lent_date: string;
+  due_date: string | null;
+  notes: string;
+  transaction_id: string;
+}
+export interface LendingRepayment {
+  id: string;
+  lending_id: string;
+  amount_minor: number;
+  account_id: string;
+  payment_date: string;
+  transaction_id: string;
+}
 export interface PlanningData {
+  lending: Lending[];
+  lendingRepayments: LendingRepayment[];
   salary: SalaryRule[];
   recurring: RecurringRule[];
   loans: Loan[];
@@ -125,6 +152,8 @@ export interface PlanningData {
   profiles: WorkProfile[];
 }
 export const emptyPlanning: PlanningData = {
+  lending: [],
+  lendingRepayments: [],
   salary: [],
   recurring: [],
   loans: [],

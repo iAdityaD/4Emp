@@ -21,7 +21,10 @@ import { useEntryOptions } from "../../state/entryOptions";
 import { useStore } from "../../state/store";
 import { durationText } from "../design/color";
 import { IconName } from "../design/primitives";
+import { LendingRepository } from "../../repositories/LendingRepository";
 export type Entity =
+  | "lending"
+  | "repayment"
   | "plan"
   | "account"
   | "category"
@@ -141,6 +144,20 @@ export const planFields: Record<PlanKind, FieldSpec[]> = {
   ],
   subscriptions: [
     title,
+    f("payment_type", "Payment type", "choice", "swap-horizontal-outline", [
+      "EXPENSE",
+      "TRANSFER",
+    ]),
+    f(
+      "destination_account_id",
+      "Investment account",
+      "account",
+      "trending-up-outline",
+      undefined,
+      true,
+    ),
+    f("end_date", "End date", "date", "calendar-outline", undefined, true),
+    f("auto_post", "Automatic ledger entry", "toggle", "sync-outline"),
     amount,
     f("anchor_date", "Next tracked renewal", "date", "calendar-outline"),
     f("interval_unit", "Billing unit", "choice", "repeat-outline", [
@@ -163,6 +180,12 @@ export const planFields: Record<PlanKind, FieldSpec[]> = {
   ],
   goals: [
     title,
+    f("tracking_basis", "Track against", "choice", "analytics-outline", [
+      "BALANCE",
+      "MONTHLY_SAVINGS",
+      "CONTRIBUTIONS",
+    ]),
+    f("account_id", "Account", "account", "wallet-outline", undefined, true),
     f("target_minor", "Target", "money", "flag-outline"),
     f("deadline", "Deadline", "date", "calendar-outline", undefined, true),
     f("color_hex", "Color", "color", "color-palette-outline"),
@@ -183,8 +206,6 @@ export const planFields: Record<PlanKind, FieldSpec[]> = {
     ]),
     f("shift_type", "Shift type", "choice", "business-outline", [
       "OFFICE",
-      "WFH",
-      "HALF_DAY",
       "CUSTOM",
       "OPEN_ENDED",
     ]),
@@ -249,7 +270,6 @@ export const workFields = [
   f("target_minutes", "Target", "duration", "time-outline"),
   f("shift_type", "Shift type", "choice", "business-outline", [
     "OFFICE",
-    "WFH",
     "CUSTOM",
   ]),
   f("notes", "Note", "text", "document-text-outline", undefined, true),
@@ -282,8 +302,6 @@ export const preferenceFields = [
   f("mode", "Tracking mode", "choice", "pulse-outline", ["GROSS", "NET"]),
   f("defaultShiftType", "Default shift", "choice", "business-outline", [
     "OFFICE",
-    "WFH",
-    "HALF_DAY",
     "CUSTOM",
     "OPEN_ENDED",
   ]),
@@ -317,6 +335,8 @@ export const planNames: Record<PlanKind, string> = {
   profiles: "Work profile",
 };
 export const wizardKeys: Record<string, string[]> = {
+  lending: ["title", "amount_minor", "account_id", "lent_date", "due_date"],
+  repayment: ["amount_minor", "account_id", "payment_date"],
   salary: ["title", "amount_minor", "payday", "account_id"],
   recurring: [
     "title",
@@ -339,13 +359,17 @@ export const wizardKeys: Record<string, string[]> = {
   subscriptions: [
     "title",
     "amount_minor",
+    "payment_type",
     "interval_unit",
     "interval_count",
     "anchor_date",
+    "end_date",
     "account_id",
+    "category_id",
+    "auto_post",
   ],
   budgets: ["category_id", "limit_minor", "month"],
-  goals: ["title", "target_minor", "deadline"],
+  goals: ["title", "target_minor", "tracking_basis", "deadline"],
   profiles: ["title", "target_minutes", "tracking_mode", "cutoff_minute"],
   bill: ["title", "amount_minor", "due_day_of_month", "account_id"],
   account: ["name", "account_type", "balance_minor"],
@@ -354,7 +378,23 @@ export const wizardKeys: Record<string, string[]> = {
   reminder: ["title", "minute", "days"],
   due: ["title", "due_at"],
 };
+export const lendingFields = [
+  title,
+  amount,
+  account,
+  f("lent_date", "Lent on", "date", "calendar-outline"),
+  f("due_date", "Expected back", "date", "calendar-outline", undefined, true),
+  f("notes", "Note", "text", "document-text-outline", undefined, true),
+];
+export const repaymentFields = [
+  f("lending_id", "Lending ID", "text", "people-outline"),
+  amount,
+  account,
+  f("payment_date", "Received on", "date", "calendar-outline"),
+];
 export function fieldsFor(entity: Entity, kind?: PlanKind): FieldSpec[] {
+  if (entity === "lending") return lendingFields;
+  if (entity === "repayment") return repaymentFields;
   return entity === "due"
     ? dueFields
     : entity === "entry"
@@ -405,6 +445,8 @@ export function recordFor(
   kind?: PlanKind,
 ): Data | undefined {
   const s = useStore.getState();
+  if (entity === "lending")
+    return s.lending.find((r) => r.id === id) as unknown as Data | undefined;
   if (entity === "due")
     return s.dueReminders.find(
       (r) => r.id === id && r.kind === "CUSTOM",
@@ -451,6 +493,9 @@ export function defaultsFor(entity: Entity, kind?: PlanKind): Data {
         (c) => c.is_active && (c.kind === "INCOME" || c.kind === "BOTH"),
       )?.id ?? null;
   return {
+    lent_date: dateKey(),
+    due_date: null,
+    payment_date: dateKey(),
     due_at: new Date(Date.now() + 3600000).toISOString(),
     first_swipe_in: new Date(Date.now() - 3600000).toISOString(),
     last_swipe_out: new Date().toISOString(),
@@ -459,7 +504,7 @@ export function defaultsFor(entity: Entity, kind?: PlanKind): Data {
     due_day_of_month: new Date().getDate(),
     title: "",
     name: "",
-    account_id: a,
+    account_id: kind === "goals" ? null : a,
     destination_account_id: s.accounts[1]?.id ?? null,
     account_type: "BANK",
     category_id: kind === "salary" ? incoming : null,
@@ -476,6 +521,9 @@ export function defaultsFor(entity: Entity, kind?: PlanKind): Data {
     interval_count: 1,
     interval_unit: "MONTH",
     auto_post: 0,
+    end_date: null,
+    payment_type: "EXPENSE",
+    tracking_basis: "BALANCE",
     is_active: 1,
     remind_days: 3,
     type: "EXPENSE",
@@ -538,6 +586,12 @@ export function formatField(spec: FieldSpec, value: unknown) {
     return new Date(
       String(value) + (spec.type === "date" ? "T12:00:00" : ""),
     ).toLocaleDateString();
+  if (["shift_type", "defaultShiftType"].includes(spec.key))
+    return value === "CUSTOM"
+      ? "Focus timer"
+      : value === "OPEN_ENDED"
+        ? "Stopwatch"
+        : "Work";
   return String(value).replaceAll("_", " ").replace("-outline", "");
 }
 export function validateValue(
@@ -581,6 +635,14 @@ export async function saveRecord(
   id?: string,
   kind?: PlanKind,
 ) {
+  if (entity === "lending") return LendingRepository.save(data, id);
+  if (entity === "repayment")
+    return LendingRepository.repay(
+      String(data.lending_id),
+      Number(data.amount_minor),
+      String(data.account_id),
+      String(data.payment_date),
+    );
   if (entity === "due") {
     const at = new Date(String(data.due_at));
     if (

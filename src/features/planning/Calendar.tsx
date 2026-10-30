@@ -140,7 +140,12 @@ export function DueDetailsScreen() {
         <Label muted>
           Reminder {new Date(r.notification_at).toLocaleString()}
         </Label>
-        {r.kind === "BILL" ? (
+        {r.kind === "LENDING" ? (
+          <Button
+            title="Lending details"
+            onPress={() => nav.navigate("LendingDetails", { id: r.source_id })}
+          />
+        ) : r.kind === "BILL" ? (
           <Button
             title="Monthly bill details"
             onPress={() => nav.navigate("Commitments")}

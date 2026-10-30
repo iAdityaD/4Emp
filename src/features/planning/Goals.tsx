@@ -19,15 +19,14 @@ import { useNav } from "../../ui/navigation";
 import { ProgressOrbit } from "../design/charts";
 import { IconButton, InfoButton } from "../design/primitives";
 import { AccountChoice, Money } from "./components";
+import { goalProgress } from "./progress";
 import { Empty } from "./screenKit";
 export function GoalsScreen() {
   const s = useStore(),
     nav = useNav();
   const [tab, setTab] = useState("ACTIVE");
   const rows = s.goals.filter((g) => {
-    const total = s.contributions
-      .filter((c) => c.goal_id === g.id)
-      .reduce((n, c) => n + c.amount_minor, 0);
+    const total = goalProgress(g, s.accounts, s.transactions, s.contributions);
     return tab === "ARCHIVED"
       ? !g.is_active
       : !!g.is_active &&
@@ -53,9 +52,12 @@ export function GoalsScreen() {
       />
       {!rows.length && <Empty text="No goals here" />}
       {rows.map((g) => {
-        const total = s.contributions
-          .filter((c) => c.goal_id === g.id)
-          .reduce((n, c) => n + c.amount_minor, 0);
+        const total = goalProgress(
+          g,
+          s.accounts,
+          s.transactions,
+          s.contributions,
+        );
         return (
           <Pressable
             key={g.id}
@@ -93,7 +95,8 @@ export function GoalDetailsScreen() {
   const rows = s.contributions
       .filter((c) => c.goal_id === id)
       .sort((a, b) => b.contribution_date.localeCompare(a.contribution_date)),
-    total = rows.reduce((n, c) => n + c.amount_minor, 0);
+    total = goalProgress(g, s.accounts, s.transactions, s.contributions),
+    manual = !g.tracking_basis || g.tracking_basis === "CONTRIBUTIONS";
   return (
     <Page
       title={g.title}
@@ -112,17 +115,28 @@ export function GoalDetailsScreen() {
           Target {currency(g.target_minor / 100, s.settings.currency)}
         </Label>
         <ProgressOrbit value={total / g.target_minor} color={g.color_hex} />
-        <Row>
-          <Button
-            title="Contribute"
-            icon="add"
-            disabled={!g.is_active}
-            onPress={() => nav.navigate("Contribution", { id })}
-          />
-        </Row>
+        {manual ? (
+          <Row>
+            <Button
+              title="Contribute"
+              icon="add"
+              disabled={!g.is_active}
+              onPress={() => nav.navigate("Contribution", { id })}
+            />
+          </Row>
+        ) : (
+          <Label muted>
+            {g.tracking_basis === "BALANCE"
+              ? "Current balance"
+              : "This month’s income − expenses"}{" "}
+            ·{" "}
+            {s.accounts.find((a) => a.id === g.account_id)?.name ??
+              "All accounts"}
+          </Label>
+        )}
       </Card>
-      <Label weight>Contributions</Label>
-      {!rows.length && <Empty text="No contributions yet" />}
+      {manual && <Label weight>Contributions</Label>}
+      {manual && !rows.length && <Empty text="No contributions yet" />}
       {rows.map((c) => (
         <Card key={c.id}>
           <Row>

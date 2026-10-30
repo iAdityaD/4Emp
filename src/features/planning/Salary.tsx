@@ -1,7 +1,29 @@
 import React from "react";
+import { useNav } from "../../ui/navigation";
+import { Button, Card, Page } from "../../ui/kit";
 import { useStore } from "../../state/store";
 import { PlanList } from "./screenKit";
 export function SalaryScreen() {
+  const nav = useNav();
+  return (
+    <Page title="Salary">
+      <Card>
+        <Button
+          title="Record salary received"
+          icon="add"
+          onPress={() => nav.navigate("QuickEntry", { type: "INCOME" })}
+        />
+        <Button
+          title="Salary rules"
+          secondary
+          icon="repeat-outline"
+          onPress={() => nav.navigate("SalaryRules")}
+        />
+      </Card>
+    </Page>
+  );
+}
+export function SalaryRulesScreen() {
   const s = useStore();
   return (
     <PlanList

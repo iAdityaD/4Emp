@@ -1,5 +1,8 @@
 import { Href, useRouter } from "expo-router";
 export type RootStack = {
+  Lending: undefined;
+  LendingDetails: { id: string };
+  SalaryRules: undefined;
   ReminderEdit: { id?: string } | undefined;
   ManualShift: undefined;
   BreakEdit: { id: string };
@@ -50,6 +53,9 @@ export type RootStack = {
   Planning: undefined;
 };
 export const paths: Record<keyof RootStack, string> = {
+  Lending: "/lending",
+  LendingDetails: "/lending-details",
+  SalaryRules: "/salary-rules",
   ReminderEdit: "/reminder-edit",
   ManualShift: "/manual-shift",
   BreakEdit: "/break-edit",

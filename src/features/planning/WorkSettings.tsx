@@ -1,3 +1,4 @@
+import { workModeLabels } from "../../domain/workModes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { SettingsRepository } from "../../repositories/SettingsRepository";
@@ -30,15 +31,10 @@ export function WorkSettingsScreen() {
           icon="shield-checkmark-outline"
           onPress={() => openField(router, "settings", "buffer")}
         />
+
         <MenuRow
-          title="Tracking mode"
-          value={s.settings.mode === "NET" ? "Working time" : "Elapsed time"}
-          icon="pulse-outline"
-          onPress={() => openField(router, "settings", "mode")}
-        />
-        <MenuRow
-          title="Default shift"
-          value={s.settings.defaultShiftType.replaceAll("_", " ")}
+          title="Default timer"
+          value={workModeLabels[s.settings.defaultShiftType]}
           icon="business-outline"
           onPress={() => openField(router, "settings", "defaultShiftType")}
         />
@@ -61,12 +57,6 @@ export function WorkSettingsScreen() {
           title="Weekday targets"
           icon="calendar-outline"
           onPress={() => router.push("/work-week")}
-        />
-        <MenuRow
-          title="Profiles"
-          value={String(s.profiles.filter((p) => p.is_active).length)}
-          icon="layers-outline"
-          onPress={() => nav.navigate("WorkProfiles")}
         />
       </Card>
       <Section title="Shift alerts" />

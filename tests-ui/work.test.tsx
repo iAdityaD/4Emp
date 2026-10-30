@@ -46,20 +46,20 @@ it("an applied profile refreshes an idle selection even when its saved defaults 
   };
   useStore.setState({ settings });
   const s = render(<HomeScreen />);
-  fireEvent.press(s.getByRole("button", { name: "OFFICE" }));
+  fireEvent.press(s.getByRole("button", { name: "Work" }));
   expect(
-    s.getByRole("button", { name: "OFFICE" }).props.accessibilityState.selected,
+    s.getByRole("button", { name: "Work" }).props.accessibilityState.selected,
   ).toBe(true);
   act(() => useStore.setState({ workProfileRevision: 1 }));
   expect(
-    s.getByRole("button", { name: "WFH" }).props.accessibilityState.selected,
+    s.getByRole("button", { name: "Work" }).props.accessibilityState.selected,
   ).toBe(true);
   expect(s.getByText("07:05:00")).toBeTruthy();
 });
 
 it("unrelated settings updates preserve a custom target draft", () => {
   const s = render(<HomeScreen />);
-  fireEvent.press(s.getByRole("button", { name: "CUSTOM" }));
+  fireEvent.press(s.getByRole("button", { name: "Focus timer" }));
   fireEvent.changeText(s.getByLabelText("Hours"), "3");
   fireEvent.changeText(s.getByLabelText("Minutes"), "15");
   act(() =>
@@ -97,6 +97,7 @@ it("rest days keep the ring at zero and require confirmation before a normal shi
   });
   expect(start).toHaveBeenCalledWith("OFFICE", 540, expect.any(Object), {
     allowRestDay: true,
+    startedAt: undefined,
   });
 });
 
@@ -115,6 +116,7 @@ it("late starts use an existing confirmation dialog before writing a shift", asy
   });
   expect(start).toHaveBeenCalledWith("OFFICE", 540, expect.any(Object), {
     allowLateStart: true,
+    startedAt: undefined,
   });
 });
 
@@ -129,13 +131,15 @@ it("custom rest-day work is explicit and needs no normal-target override", async
   const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
   const start = jest.spyOn(ShiftRepository, "start").mockResolvedValue();
   const s = render(<HomeScreen />);
-  fireEvent.press(s.getByRole("button", { name: "CUSTOM" }));
+  fireEvent.press(s.getByRole("button", { name: "Focus timer" }));
   fireEvent.changeText(s.getByLabelText("Hours"), "3");
   await act(async () => {
-    fireEvent.press(s.getByText("Swipe in"));
+    fireEvent.press(s.getByText("Start timer"));
   });
   expect(alert).not.toHaveBeenCalled();
-  expect(start).toHaveBeenCalledWith("CUSTOM", 180, expect.any(Object), {});
+  expect(start).toHaveBeenCalledWith("CUSTOM", 180, expect.any(Object), {
+    startedAt: undefined,
+  });
 });
 
 it("overnight home targets and leave status use Friday's workday after midnight", () => {
@@ -221,8 +225,8 @@ it("profile changes never rewrite an active shift's displayed target or mode", (
     })),
   );
   expect(s.getByText("09:05:00")).toBeTruthy();
-  expect(s.getByText("GROSS mode")).toBeTruthy();
-  expect(s.getByText("OFFICE · +5m buffer")).toBeTruthy();
+  expect(s.getByText("Swipe tracking")).toBeTruthy();
+  expect(s.getByText("Work · +5m buffer")).toBeTruthy();
 });
 
 it("declaring leave dismisses work notifications without clearing finance alerts", async () => {

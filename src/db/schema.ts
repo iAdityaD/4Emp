@@ -68,6 +68,20 @@ CREATE INDEX idx_reminder_due ON reminders(due_at);
 CREATE INDEX idx_goals_date ON goal_contributions(contribution_date);
 CREATE INDEX idx_salary_date ON salary_occurrences(occurrence_date);
 CREATE TABLE work_profiles(id TEXT PRIMARY KEY,is_active INTEGER NOT NULL DEFAULT 1,title TEXT NOT NULL,target_minutes INTEGER NOT NULL CHECK(target_minutes BETWEEN 1 AND 1440),buffer_minutes INTEGER NOT NULL CHECK(buffer_minutes BETWEEN 0 AND 60),tracking_mode TEXT NOT NULL CHECK(tracking_mode IN ('GROSS','NET')),shift_type TEXT NOT NULL CHECK(shift_type IN ('OFFICE','WFH','HALF_DAY','CUSTOM','OPEN_ENDED')),cutoff_minute INTEGER NOT NULL CHECK(cutoff_minute BETWEEN 0 AND 1439),weekdays INTEGER NOT NULL DEFAULT 31 CHECK(weekdays BETWEEN 0 AND 127));`,
+  `ALTER TABLE subscriptions ADD COLUMN end_date TEXT;
+ALTER TABLE subscriptions ADD COLUMN auto_post INTEGER NOT NULL DEFAULT 0 CHECK(auto_post IN (0,1));
+ALTER TABLE subscriptions ADD COLUMN payment_type TEXT NOT NULL DEFAULT 'EXPENSE' CHECK(payment_type IN ('EXPENSE','TRANSFER'));
+ALTER TABLE subscriptions ADD COLUMN destination_account_id TEXT REFERENCES accounts(id);
+ALTER TABLE savings_goals ADD COLUMN tracking_basis TEXT NOT NULL DEFAULT 'CONTRIBUTIONS' CHECK(tracking_basis IN ('CONTRIBUTIONS','BALANCE','MONTHLY_SAVINGS'));
+ALTER TABLE savings_goals ADD COLUMN account_id TEXT REFERENCES accounts(id);
+ALTER TABLE budgets ADD COLUMN reset_at TEXT;
+CREATE TABLE lending(id TEXT PRIMARY KEY,title TEXT NOT NULL,amount_minor INTEGER NOT NULL CHECK(typeof(amount_minor)='integer' AND amount_minor>0),account_id TEXT NOT NULL REFERENCES accounts(id),lent_date TEXT NOT NULL,due_date TEXT,notes TEXT NOT NULL DEFAULT '',transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id));
+CREATE TABLE lending_repayments(id TEXT PRIMARY KEY,lending_id TEXT NOT NULL REFERENCES lending(id),amount_minor INTEGER NOT NULL CHECK(typeof(amount_minor)='integer' AND amount_minor>0),account_id TEXT NOT NULL REFERENCES accounts(id),payment_date TEXT NOT NULL,transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id));
+CREATE INDEX idx_lending_date ON lending(lent_date);
+CREATE INDEX idx_lending_account ON lending(account_id);
+CREATE INDEX idx_lending_repayment ON lending_repayments(lending_id,payment_date);
+UPDATE app_settings SET value='"OFFICE"' WHERE key='defaultShiftType' AND value IN ('"WFH"','"HALF_DAY"');
+UPDATE work_profiles SET shift_type='OFFICE' WHERE shift_type IN ('WFH','HALF_DAY');`,
 ];
 export const backupTables = [
   "app_settings",
@@ -94,5 +108,7 @@ export const backupTables = [
   "goal_contributions",
   "reminders",
   "work_profiles",
+  "lending",
+  "lending_repayments",
   "schema_metadata",
 ] as const;

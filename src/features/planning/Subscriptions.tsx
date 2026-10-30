@@ -8,7 +8,7 @@ import { Card, Chips, Label, Page, useTheme } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
 import { IconButton, MenuRow } from "../design/primitives";
 import { openField } from "../editor/Screens";
-import { occurrences } from "./calculations";
+import { subscriptionDates } from "./progress";
 import { Money } from "./components";
 function forecast() {
   const d = new Date();
@@ -40,13 +40,7 @@ export function SubscriptionsScreen() {
         {s.subscriptions
           .filter((x) => !!x.is_active === (active === "ACTIVE"))
           .map((r) => {
-            const next = occurrences(
-              r.anchor_date,
-              r.interval_count,
-              r.interval_unit,
-              r.anchor_date,
-              forecast(),
-            ).find(
+            const next = subscriptionDates(r, forecast()).find(
               (d) =>
                 !s.subscriptionPayments.some(
                   (p) => p.subscription_id === r.id && p.occurrence_date === d,
@@ -56,7 +50,14 @@ export function SubscriptionsScreen() {
               <MenuRow
                 key={r.id}
                 title={r.title}
-                value={next ?? "No due renewal"}
+                value={
+                  !r.is_active
+                    ? "Paused"
+                    : (next ??
+                      (r.end_date && r.end_date < dateKey()
+                        ? "Ended"
+                        : "No due payment"))
+                }
                 icon="repeat-outline"
                 trailing={<Money minor={r.amount_minor} />}
                 onPress={() =>
@@ -85,13 +86,7 @@ export function SubscriptionDetailsScreen() {
         <Label>No record</Label>
       </Page>
     );
-  const dates = occurrences(
-      r.anchor_date,
-      r.interval_count,
-      r.interval_unit,
-      r.anchor_date,
-      forecast(),
-    ),
+  const dates = subscriptionDates(r, forecast()),
     unpaid = dates.filter(
       (d) =>
         !s.subscriptionPayments.some(
@@ -126,8 +121,14 @@ export function SubscriptionDetailsScreen() {
         </View>
         <Money minor={r.amount_minor} large />
         <Label muted>
-          Every {r.interval_count} {r.interval_unit.toLowerCase()}
+          Every {r.interval_count} {r.interval_unit.toLowerCase()} ·{" "}
+          {r.is_active
+            ? r.end_date && r.end_date < dateKey()
+              ? "Ended"
+              : "Active"
+            : "Paused"}
         </Label>
+        {r.end_date && <Label muted>Ends {r.end_date}</Label>}
       </View>
       <Card>
         <MenuRow

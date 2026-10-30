@@ -7,6 +7,7 @@ import {
   salaryDates,
   budgetSpent,
 } from "../features/planning/calculations";
+import { subscriptionDates } from "../features/planning/progress";
 import { cycle, obligationDate } from "../domain/finance";
 import { Commitment, Transaction } from "../domain/models";
 /** Every generated payment and its occurrence identity commit together. */
@@ -127,18 +128,35 @@ export async function reconcilePlans(
           l.remind_days,
         );
     for (const s of data.subscriptions.filter((s) => s.is_active))
-      for (const date of occurrences(
-        s.anchor_date,
-        s.interval_count,
-        s.interval_unit,
-        s.anchor_date,
-        horizon,
-      ))
-        if (
-          !data.subscriptionPayments.some(
-            (p) => p.subscription_id === s.id && p.occurrence_date === date,
-          )
-        )
+      for (const date of subscriptionDates(s, horizon)) {
+        const paid = await tx.getFirstAsync(
+          "SELECT transaction_id FROM subscription_payments WHERE subscription_id=? AND occurrence_date=?",
+          s.id,
+          date,
+        );
+        if (paid) continue;
+        if (s.auto_post && date <= today) {
+          const tid = await writeEntry(
+            tx,
+            {
+              accountId: s.account_id,
+              destinationId: s.destination_account_id ?? undefined,
+              type: s.payment_type ?? "EXPENSE",
+              amount: s.amount_minor / 100,
+              categoryId: s.category_id ?? undefined,
+              date: localDate(date).toISOString(),
+              note: `${s.title} • ${date}`,
+            },
+            uid(),
+            "COMMITMENT",
+          );
+          await tx.runAsync(
+            "INSERT INTO subscription_payments VALUES(?,?,?)",
+            s.id,
+            date,
+            tid,
+          );
+        } else
           await remind(
             "SUBSCRIPTION",
             s.id,
@@ -147,6 +165,20 @@ export async function reconcilePlans(
             s.amount_minor,
             s.remind_days,
           );
+      }
+    for (const r of data.lending) {
+      const paid = data.lendingRepayments
+        .filter((p) => p.lending_id === r.id)
+        .reduce((n, p) => n + p.amount_minor, 0);
+      if (r.due_date && paid < r.amount_minor)
+        await remind(
+          "LENDING",
+          r.id,
+          r.due_date,
+          r.title,
+          r.amount_minor - paid,
+        );
+    }
     const legacy = await tx.getAllAsync<Commitment>(
       "SELECT *,amount_minor/100.0 AS amount FROM fixed_commitments WHERE is_active=1",
     );
@@ -183,7 +215,7 @@ export async function reconcilePlans(
     const month = today.slice(0, 7),
       ledger = await tx.getAllAsync<Transaction>("SELECT * FROM ledger");
     for (const b of data.budgets.filter((b) => b.month === month)) {
-      const spent = budgetSpent(ledger, month, b.category_id);
+      const spent = budgetSpent(ledger, month, b.category_id, b.reset_at);
       for (const level of new Set([b.alert_percent, 100]))
         if (spent >= (b.limit_minor * level) / 100)
           await tx.runAsync(

@@ -31,11 +31,17 @@ export function notificationPlan(
   const push = (
     alarm: PlannedAlarm,
     day = workDate(alarm.at, settings.cutoff),
+    focus = false,
   ) => {
-    if (alarm.at > now && !muted.has(day)) plan.push(alarm);
+    if (alarm.at > now && (focus || !muted.has(day))) plan.push(alarm);
   };
   for (const s of shifts.filter((s) => s.status === "ACTIVE")) {
-    if (muted.has(s.work_date)) continue;
+    if (
+      muted.has(s.work_date) &&
+      s.shift_type !== "CUSTOM" &&
+      s.shift_type !== "OPEN_ENDED"
+    )
+      continue;
     const m = metrics(
       s,
       breaks.filter((b) => b.shift_id === s.id),
@@ -46,7 +52,7 @@ export function notificationPlan(
       !m.review &&
       !(s.tracking_mode === "NET" && m.breakActive)
     ) {
-      const cutoff = Date.parse(s.cutoff_at ?? "");
+      const cutoff = s.cutoff_at ? Date.parse(s.cutoff_at) : Infinity;
       for (const [name, offset, title, body] of [
         [
           "warning",
@@ -57,8 +63,14 @@ export function notificationPlan(
         [
           "target",
           0,
-          s.shift_type === "WFH" ? "Work target reached" : "Safe to swipe out",
-          `Mandatory hours completed. +${s.buffer_minutes}m buffer included.`,
+          s.shift_type === "CUSTOM"
+            ? "Focus complete"
+            : s.shift_type === "WFH"
+              ? "Work target reached"
+              : "Safe to swipe out",
+          s.shift_type === "CUSTOM"
+            ? "Your focus timer is complete."
+            : `Work target completed. +${s.buffer_minutes}m buffer included.`,
         ],
         [
           "overtime",
@@ -69,7 +81,8 @@ export function notificationPlan(
       ] as const)
         if (
           (name !== "warning" || settings.shiftWarningMinutes > 0) &&
-          (name !== "overtime" || settings.overtimeMinutes > 0) &&
+          (name !== "overtime" ||
+            (settings.overtimeMinutes > 0 && s.shift_type !== "CUSTOM")) &&
           m.target + offset <= cutoff
         )
           push(
@@ -80,6 +93,7 @@ export function notificationPlan(
               body,
             },
             s.work_date,
+            s.shift_type === "CUSTOM",
           );
     }
     if (s.shift_type !== "OPEN_ENDED" && s.cutoff_at)

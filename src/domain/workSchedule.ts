@@ -1,3 +1,4 @@
+import { isFocus } from "./workModes";
 import type { Settings, ShiftType } from "./models";
 import { cutoffWindow, localDate, shiftTarget, workDate } from "./shift";
 
@@ -13,6 +14,7 @@ export function scheduledMinutes(settings: Settings, day: string): number {
 export interface StartOptions {
   allowRestDay?: boolean;
   allowLateStart?: boolean;
+  startedAt?: number;
 }
 
 export function shiftStartPlan(
@@ -39,7 +41,7 @@ export function shiftStartPlan(
   const effective =
     requiresRestConfirmation || type === "OPEN_ENDED"
       ? 0
-      : target + settings.buffer;
+      : target + (isFocus(type) ? 0 : settings.buffer);
   const cutoff = cutoffWindow(now, settings.cutoff).end;
   return {
     day,
@@ -50,6 +52,7 @@ export function shiftStartPlan(
     cutoff,
     targetAt: now + effective * 60000,
     latest: cutoff - effective * 60000,
-    exceedsCutoff: effective > 0 && now + effective * 60000 > cutoff,
+    exceedsCutoff:
+      !isFocus(type) && effective > 0 && now + effective * 60000 > cutoff,
   };
 }

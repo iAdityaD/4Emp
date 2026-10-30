@@ -13,22 +13,35 @@ import {
   MenuRow,
   Section,
 } from "../design/primitives";
+import { goalProgress } from "./progress";
 import { budgetSpent } from "./calculations";
 export function PlanningScreen() {
   const s = useStore(),
     nav = useNav(),
     t = useTheme(),
     month = dateKey().slice(0, 7);
-  const saved = s.contributions
-      .filter((c) => s.goals.some((g) => g.id === c.goal_id && g.is_active))
-      .reduce((n, c) => n + c.amount_minor, 0),
+  const saved = s.goals
+      .filter((g) => g.is_active)
+      .reduce(
+        (n, g) =>
+          n +
+          Math.max(
+            0,
+            Math.min(
+              g.target_minor,
+              goalProgress(g, s.accounts, s.transactions, s.contributions),
+            ),
+          ),
+        0,
+      ),
     target = s.goals
       .filter((g) => g.is_active)
       .reduce((n, g) => n + g.target_minor, 0),
     budget = s.budgets.filter((b) => b.month === month),
     limit = budget.reduce((n, b) => n + b.limit_minor, 0),
     spent = budget.reduce(
-      (n, b) => n + budgetSpent(s.transactions, month, b.category_id),
+      (n, b) =>
+        n + budgetSpent(s.transactions, month, b.category_id, b.reset_at),
       0,
     ),
     emi = s.loans
@@ -138,6 +151,12 @@ export function PlanningScreen() {
         ]}
       />
       <Card>
+        <MenuRow
+          title="Lending"
+          icon="people-outline"
+          value={String(s.lending.length)}
+          onPress={() => nav.navigate("Lending")}
+        />
         <MenuRow
           title="Monthly bills"
           icon="receipt-outline"

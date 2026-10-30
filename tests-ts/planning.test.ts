@@ -96,7 +96,11 @@ test("loan principal conservation and exact final installment, with interest sep
   assert.equal(rows[2]!.due_date, "2026-03-31");
   assert.throws(() => amortization(p, bps, n, 1, "2026-01-01"));
 });
-test("salary catch-up is idempotent; deleting a generated salary never regenerates it", async () => {
+test("salary catch-up is idempotent; deleting a generated salary never regenerates it", async (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date(2026, 9, 1, 9).getTime(),
+  });
   const sql = testDatabase();
   const today = dateKey(),
     month = today.slice(0, 7);

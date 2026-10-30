@@ -152,10 +152,12 @@ export function budgetSpent(
   transactions: Transaction[],
   month: string,
   category: string,
+  resetAt?: string | null,
 ) {
   return transactions
     .filter(
       (t) =>
+        (!resetAt || t.transaction_date > resetAt) &&
         t.category_id === category &&
         dateKey(Date.parse(t.transaction_date)).startsWith(month),
     )

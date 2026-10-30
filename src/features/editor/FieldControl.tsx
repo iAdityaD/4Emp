@@ -21,11 +21,14 @@ import { Data, FieldSpec } from "./model";
 const labels: Record<string, string> = {
   GROSS: "Elapsed time",
   NET: "Working time",
-  OFFICE: "Office",
+  OFFICE: "Work",
   WFH: "Home",
   HALF_DAY: "Half day",
-  CUSTOM: "Custom",
+  CUSTOM: "Focus timer",
   OPEN_ENDED: "Stopwatch",
+  BALANCE: "Current balance",
+  MONTHLY_SAVINGS: "This month’s savings",
+  CONTRIBUTIONS: "Manual contributions",
   EXPENSE: "Expense",
   INCOME: "Income",
   TRANSFER: "Transfer",
@@ -84,7 +87,13 @@ export function FieldControl({
       />
     );
   if (spec.type === "account")
-    return <AccountChoice value={String(value ?? "")} onChange={onChange} />;
+    return (
+      <AccountChoice
+        value={String(value ?? "")}
+        onChange={onChange}
+        optional={spec.optional}
+      />
+    );
   if (spec.type === "category")
     return (
       <CategoryChoice
@@ -107,7 +116,11 @@ export function FieldControl({
             key={option}
             accessibilityRole="radio"
             accessibilityState={{ checked: value === option }}
-            accessibilityLabel={labels[option] ?? option}
+            accessibilityLabel={
+              spec.key === "payment_type" && option === "TRANSFER"
+                ? "Investment transfer"
+                : (labels[option] ?? option)
+            }
             onPress={() => onChange(option)}
             style={{
               padding: 18,
@@ -118,7 +131,11 @@ export function FieldControl({
             }}
           >
             <Row>
-              <Label weight>{labels[option] ?? option}</Label>
+              <Label weight>
+                {spec.key === "payment_type" && option === "TRANSFER"
+                  ? "Investment transfer"
+                  : (labels[option] ?? option)}
+              </Label>
               <Ionicons
                 name={value === option ? "checkmark-circle" : "ellipse-outline"}
                 size={24}

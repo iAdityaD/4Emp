@@ -45,6 +45,7 @@ import {
   validateValue,
   wizardKeys,
 } from "./model";
+import { transactionExpired } from "../../domain/transactionPolicy";
 interface Draft {
   entity: Entity;
   kind?: PlanKind;
@@ -66,6 +67,8 @@ export const useCreation = create<{
 }));
 const isEntity = (v: string): v is Entity =>
   [
+    "lending",
+    "repayment",
     "plan",
     "account",
     "category",
@@ -79,20 +82,26 @@ const isEntity = (v: string): v is Entity =>
     "due",
   ].includes(v);
 const titleFor = (entity: Entity, kind?: PlanKind) =>
-  entity === "due"
-    ? "Personal reminder"
-    : entity === "plan" && kind
-      ? planNames[kind]
-      : entity === "worklog"
-        ? "Work log"
-        : entity === "reminder"
-          ? "Work reminder"
-          : entity === "account"
-            ? "Account"
-            : entity === "category"
-              ? "Category"
-              : "Record";
+  entity === "lending"
+    ? "Lending"
+    : entity === "repayment"
+      ? "Repayment"
+      : entity === "due"
+        ? "Personal reminder"
+        : entity === "plan" && kind
+          ? planNames[kind]
+          : entity === "worklog"
+            ? "Work log"
+            : entity === "reminder"
+              ? "Work reminder"
+              : entity === "account"
+                ? "Account"
+                : entity === "category"
+                  ? "Category"
+                  : "Record";
 const destinations: Record<string, string> = {
+  lending: "/lending",
+  repayment: "/lending",
   salary: "/salary",
   recurring: "/recurring",
   loans: "/loans",
@@ -122,9 +131,11 @@ export function openField(
 export function StartSetup({
   entity,
   kind,
+  initial,
 }: {
   entity: Entity;
   kind?: PlanKind;
+  initial?: Data;
 }) {
   const router = useRouter(),
     started = useRef(false);
@@ -132,9 +143,11 @@ export function StartSetup({
     if (started.current) return;
     started.current = true;
     const token = uid();
-    useCreation
-      .getState()
-      .put(token, { entity, kind, data: defaultsFor(entity, kind) });
+    useCreation.getState().put(token, {
+      entity,
+      kind,
+      data: { ...defaultsFor(entity, kind), ...initial },
+    });
     router.dismissTo((destinations[kind ?? entity] ?? "/plan") as Href);
     router.push({
       pathname: "/setup/[entity]/[step]",
@@ -172,6 +185,16 @@ export function FocusedEditScreen() {
   const [destination, setDestination] = useState(
     String(record?.destination_account_id ?? ""),
   );
+  if (
+    entity === "transaction" &&
+    record &&
+    transactionExpired(String(record.transaction_date))
+  )
+    return (
+      <Page title="Transaction locked">
+        <Label muted>The 24-hour edit window has ended.</Label>
+      </Page>
+    );
   if (!spec || !record)
     return (
       <Page title="Unavailable">
@@ -215,8 +238,9 @@ export function FocusedEditScreen() {
         data={{ ...record, __kind: p.kind }}
       />
       {(entity === "transaction" ||
-        (entity === "plan" && p.kind === "recurring")) &&
-        spec.key === "type" &&
+        (entity === "plan" &&
+          ["recurring", "subscriptions"].includes(p.kind ?? ""))) &&
+        ["type", "payment_type"].includes(spec.key) &&
         value === "TRANSFER" && (
           <FieldControl
             spec={{
@@ -247,8 +271,9 @@ export function FocusedEditScreen() {
                   value,
                   p.kind,
                   (entity === "transaction" ||
-                    (entity === "plan" && p.kind === "recurring")) &&
-                    spec.key === "type"
+                    (entity === "plan" &&
+                      ["recurring", "subscriptions"].includes(p.kind ?? ""))) &&
+                    ["type", "payment_type"].includes(spec.key)
                     ? { destination_account_id: destination }
                     : undefined,
                 ),
@@ -280,9 +305,15 @@ export function RecordSettingsScreen({
     );
   const specs = fieldsFor(entity, kind).filter(
     (f) =>
-      (f.key !== "destination_account_id" || record.type === "TRANSFER") &&
+      (f.key !== "destination_account_id" ||
+        record.type === "TRANSFER" ||
+        record.payment_type === "TRANSFER") &&
       (f.key !== "is_reimbursable" || record.type === "EXPENSE") &&
-      !(entity === "worklog" && f.key === "shift_type"),
+      !(entity === "worklog" && f.key === "shift_type") &&
+      !(
+        entity === "lending" &&
+        ["amount_minor", "account_id", "lent_date"].includes(f.key)
+      ),
   );
   return (
     <Page
@@ -465,6 +496,30 @@ export function RecordSettingsScreen({
           }
         />
       )}
+      {entity === "plan" && kind === "budgets" && (
+        <Button
+          title="Reset spending counter"
+          secondary
+          icon="refresh-outline"
+          onPress={() =>
+            Alert.alert(
+              "Reset this budget?",
+              "Recorded transactions stay in your history. This budget counts spending from now.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Reset",
+                  onPress: () =>
+                    void act(
+                      () => PlanningRepository.resetBudget(id),
+                      () => nav.goBack(),
+                    ),
+                },
+              ],
+            )
+          }
+        />
+      )}
       {entity === "plan" && kind && (
         <Button
           secondary
@@ -523,7 +578,8 @@ export function SetupScreen() {
     );
   const keys = [...(wizardKeys[draft.kind ?? draft.entity] ?? ["title"])],
     index =
-      (draft.kind === "recurring" && draft.data.type === "TRANSFER"
+      ((draft.kind === "recurring" && draft.data.type === "TRANSFER") ||
+      (draft.kind === "subscriptions" && draft.data.payment_type === "TRANSFER")
         ? keys.splice(
             keys.indexOf("account_id") + 1,
             0,
@@ -647,7 +703,10 @@ export function SetupScreen() {
                 const nextValue = spec.optional && value === "" ? null : value;
                 validateValue(draft.entity, spec, nextValue, draft.kind);
                 const data = { ...draft.data, [spec.key]: nextValue };
-                if (spec.key === "type" && value !== "TRANSFER")
+                if (
+                  ["type", "payment_type"].includes(spec.key) &&
+                  value !== "TRANSFER"
+                )
                   data.destination_account_id = null;
                 if (
                   spec.key === "interval_unit" &&

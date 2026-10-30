@@ -1,6 +1,7 @@
+import { currentMode, isFocus } from "../domain/workModes";
 import { db, uid } from "../db/connection";
 import { Shift, Break, ShiftType, Settings } from "../domain/models";
-import { cutoffWindow, workDate, metrics } from "../domain/shift";
+import { cutoffWindow, workDate, metrics, dateKey } from "../domain/shift";
 import { shiftStartPlan, StartOptions } from "../domain/workSchedule";
 import { SettingsRepository } from "./SettingsRepository";
 export const ShiftRepository = {
@@ -27,7 +28,19 @@ export const ShiftRepository = {
       "SELECT * FROM work_shifts WHERE status IN ('ACTIVE','NEEDS_REVIEW')",
     );
     if (existing) throw Error("Complete or review the previous shift first");
-    const now = Date.now();
+    type = currentMode(type);
+    const now = options.startedAt ?? Date.now();
+    if (!Number.isFinite(now) || now > Date.now())
+      throw Error("Choose a swipe-in time in the past");
+    if (
+      await db().getFirstAsync(
+        "SELECT id FROM work_shifts WHERE first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,?)>?",
+        new Date().toISOString(),
+        new Date().toISOString(),
+        new Date(now).toISOString(),
+      )
+    )
+      throw Error("This swipe-in overlaps another session");
     const plan = shiftStartPlan(now, settings, type, custom, options);
     if (plan.requiresRestConfirmation)
       throw Error(
@@ -46,15 +59,16 @@ export const ShiftRepository = {
     await db().runAsync(
       "INSERT INTO work_shifts(id,work_date,tracking_mode,shift_type,target_minutes,buffer_minutes,first_swipe_in,status,created_at,cutoff_at) VALUES(?,?,?,?,?,?,?,'ACTIVE',?,?)",
       uid(),
-      plan.day,
-      settings.mode,
+      isFocus(type) ? dateKey(now) : plan.day,
+      isFocus(type) ? "NET" : "GROSS",
       type,
       target,
-      type === "OPEN_ENDED" ? 0 : settings.buffer,
+      isFocus(type) ? 0 : settings.buffer,
       new Date(now).toISOString(),
-      now,
-      new Date(plan.cutoff).toISOString(),
+      Date.now(),
+      isFocus(type) ? null : new Date(plan.cutoff).toISOString(),
     );
+    await this.recover();
   },
   async toggleBreak(shift: Shift) {
     if (shift.status !== "ACTIVE" || metrics(shift, [], Date.now()).review)
@@ -114,12 +128,20 @@ export const ShiftRepository = {
       savedCutoff && Number.isFinite(savedCutoff.getTime())
         ? savedCutoff.getHours() * 60 + savedCutoff.getMinutes()
         : (await SettingsRepository.load()).cutoff;
-    const correctedCutoff = cutoffWindow(start, cutoffMinute).end;
-    const correctedDate = workDate(start, cutoffMinute);
+    const focus = isFocus(shift.shift_type);
+    const correctedCutoff = focus
+      ? Infinity
+      : cutoffWindow(start, cutoffMinute).end;
+    const correctedDate = focus
+      ? dateKey(start)
+      : workDate(start, cutoffMinute);
     const other = await db().getFirstAsync<Shift>(
-      "SELECT * FROM work_shifts WHERE id<>? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at)>?",
+      "SELECT * FROM work_shifts WHERE id<>? AND first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,'9999-12-31T23:59:59Z')>?",
       shift.id,
-      new Date(end ?? correctedCutoff).toISOString(),
+      new Date(
+        end ??
+          (Number.isFinite(correctedCutoff) ? correctedCutoff : Date.now()),
+      ).toISOString(),
       new Date(start).toISOString(),
     );
     if (other) throw Error("Shift times overlap");
@@ -143,7 +165,7 @@ export const ShiftRepository = {
             : "ACTIVE"
           : "COMPLETED",
         correctedDate,
-        new Date(correctedCutoff).toISOString(),
+        focus ? null : new Date(correctedCutoff).toISOString(),
         shift.id,
       );
     });
@@ -162,14 +184,14 @@ export const ShiftRepository = {
       end <= start ||
       end > Date.now() ||
       !Number.isInteger(target) ||
-      target < 1 ||
+      target < (type === "OPEN_ENDED" ? 0 : 1) ||
       target > 1440
     )
       throw Error("Enter valid past times and a target of 1–1440 minutes");
     await db().withExclusiveTransactionAsync(async (tx) => {
       if (
         await tx.getFirstAsync(
-          "SELECT id FROM work_shifts WHERE first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at)>?",
+          "SELECT id FROM work_shifts WHERE first_swipe_in<? AND COALESCE(last_swipe_out,cutoff_at,'9999-12-31T23:59:59Z')>?",
           new Date(end).toISOString(),
           new Date(start).toISOString(),
         )
@@ -178,16 +200,18 @@ export const ShiftRepository = {
       await tx.runAsync(
         "INSERT INTO work_shifts(id,work_date,tracking_mode,shift_type,target_minutes,buffer_minutes,first_swipe_in,last_swipe_out,status,notes,created_at,cutoff_at) VALUES(?,?,?,?,?,?,?,?,'COMPLETED',?,?,?)",
         uid(),
-        workDate(start, settings.cutoff),
+        isFocus(type) ? dateKey(start) : workDate(start, settings.cutoff),
         settings.mode,
         type,
-        target,
-        settings.buffer,
+        type === "OPEN_ENDED" ? 0 : target,
+        isFocus(type) ? 0 : settings.buffer,
         new Date(start).toISOString(),
         new Date(end).toISOString(),
         notes,
         Date.now(),
-        new Date(cutoffWindow(start, settings.cutoff).end).toISOString(),
+        isFocus(type)
+          ? null
+          : new Date(cutoffWindow(start, settings.cutoff).end).toISOString(),
       );
     });
   },

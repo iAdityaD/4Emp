@@ -59,6 +59,10 @@ export const planSchemas = {
   }),
   subscriptions: z.object({
     ...common,
+    end_date: validDate.nullable().default(null),
+    auto_post: z.number().int().min(0).max(1).default(0),
+    payment_type: z.enum(["EXPENSE", "TRANSFER"]).default("EXPENSE"),
+    destination_account_id: z.string().nullable().default(null),
     amount_minor: minor,
     anchor_date: validDate,
     interval_count: count,
@@ -73,6 +77,10 @@ export const planSchemas = {
   }),
   goals: z.object({
     title,
+    tracking_basis: z
+      .enum(["CONTRIBUTIONS", "BALANCE", "MONTHLY_SAVINGS"])
+      .default("CONTRIBUTIONS"),
+    account_id: z.string().nullable().default(null),
     target_minor: minor,
     deadline: validDate.nullable(),
     color_hex: z.string().regex(/^#[a-fA-F0-9]{6}$/),
@@ -112,6 +120,8 @@ export const PlanningRepository = {
       "goal_contributions",
       "reminders",
       "work_profiles",
+      "lending",
+      "lending_repayments",
     ];
     const rows = await Promise.all(
       names.map((n) => db().getAllAsync(`SELECT * FROM ${n}`)),
@@ -129,19 +139,31 @@ export const PlanningRepository = {
         "contributions",
         "dueReminders",
         "profiles",
+        "lending",
+        "lendingRepayments",
       ].map((key, i) => [key, rows[i]]),
     ) as unknown as PlanningData;
   },
   async save(kind: PlanKind, input: unknown, id?: string) {
-    const data = planSchemas[kind].parse(input) as Record<
+    const normalized =
+      kind === "goals"
+        ? {
+            ...(input as object),
+            account_id: (input as { account_id?: string }).account_id || null,
+          }
+        : input;
+    const data = planSchemas[kind].parse(normalized) as Record<
       string,
       string | number | null
     >;
+    if (kind === "subscriptions" && data.payment_type === "EXPENSE")
+      data.destination_account_id = null;
     const key = id ?? uid();
     const table = planTables[kind];
     await db().withExclusiveTransactionAsync(async (tx) => {
       if (
         "account_id" in data &&
+        data.account_id &&
         !(await tx.getFirstAsync(
           "SELECT id FROM accounts WHERE id=? AND is_active=1",
           data.account_id!,
@@ -156,9 +178,11 @@ export const PlanningRepository = {
         const expected =
           kind === "salary"
             ? "INCOME"
-            : kind === "recurring"
-              ? data.type
-              : "EXPENSE";
+            : kind === "subscriptions" && data.payment_type === "TRANSFER"
+              ? "TRANSFER"
+              : kind === "recurring"
+                ? data.type
+                : "EXPENSE";
         if (
           !c ||
           (expected !== "TRANSFER" && c.kind !== "BOTH" && c.kind !== expected)
@@ -182,6 +206,16 @@ export const PlanningRepository = {
           data.destination_account_id === data.account_id)
       )
         throw Error("Select different transfer accounts");
+      if (kind === "subscriptions") {
+        if (data.end_date && String(data.end_date) < String(data.anchor_date))
+          throw Error("End date must follow the first payment");
+        if (
+          data.payment_type === "TRANSFER" &&
+          (!data.destination_account_id ||
+            data.destination_account_id === data.account_id)
+        )
+          throw Error("Choose a different investment account");
+      }
       let preserveLoanSchedule = false;
       if (
         kind === "loans" &&
@@ -277,6 +311,18 @@ export const PlanningRepository = {
             "Create a new subscription to change the paid billing schedule",
           );
       }
+      if (
+        kind === "goals" &&
+        id &&
+        data.tracking_basis !== "CONTRIBUTIONS" &&
+        (await tx.getFirstAsync(
+          "SELECT account_id FROM goal_contributions WHERE goal_id=? GROUP BY account_id HAVING SUM(amount_minor)<>0",
+          id,
+        ))
+      )
+        throw Error(
+          "Release existing contributions before switching goal tracking",
+        );
       const fields = Object.keys(data).filter((k) => data[k] !== undefined);
       await tx.runAsync(
         `INSERT INTO ${table}(id,${fields.join(",")}) VALUES(?,${fields.map(() => "?").join(",")}) ON CONFLICT(id) DO UPDATE SET ${fields.map((k) => `${k}=excluded.${k}`).join(",")}`,
@@ -356,6 +402,8 @@ export const PlanningRepository = {
         id,
       );
       if (!s) throw Error("Subscription unavailable");
+      if (s.end_date && date > s.end_date)
+        throw Error("Payment is after the end date");
       if (
         !occurrences(
           s.anchor_date,
@@ -370,7 +418,8 @@ export const PlanningRepository = {
         tx,
         {
           accountId: accountId ?? s.account_id,
-          type: "EXPENSE",
+          type: s.payment_type ?? "EXPENSE",
+          destinationId: s.destination_account_id ?? undefined,
           amount: s.amount_minor / 100,
           categoryId: s.category_id ?? undefined,
           note: `${s.title} • renewal ${date}`,
@@ -400,6 +449,8 @@ export const PlanningRepository = {
         goalId,
       );
       if (!goal) throw Error("Goal unavailable");
+      if (goal.tracking_basis !== "CONTRIBUTIONS")
+        throw Error("This goal tracks your balance automatically");
       const total = await tx.getFirstAsync<{ n: number }>(
         "SELECT COALESCE(SUM(amount_minor),0) n FROM goal_contributions WHERE goal_id=? AND account_id=?",
         goalId,
@@ -440,6 +491,16 @@ export const PlanningRepository = {
         note,
         tid,
       );
+    });
+  },
+  async resetBudget(id: string) {
+    await db().withExclusiveTransactionAsync(async (tx) => {
+      await tx.runAsync(
+        "UPDATE budgets SET reset_at=? WHERE id=?",
+        new Date().toISOString(),
+        id,
+      );
+      await tx.runAsync("DELETE FROM budget_alerts WHERE budget_id=?", id);
     });
   },
   async dismissReminder(id: string) {

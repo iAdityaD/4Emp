@@ -71,6 +71,8 @@ export async function replaceSnapshot(
               "holiday_date",
               "occurrence_date",
               "due_date",
+              "lent_date",
+              "payment_date",
             ].includes(key)
           ) {
             if (

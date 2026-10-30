@@ -32,6 +32,10 @@ export function FinanceDashboardScreen() {
         (r) =>
           r.enabled &&
           r.kind !== "SALARY" &&
+          r.kind !== "LENDING" &&
+          (r.kind !== "SUBSCRIPTION" ||
+            s.subscriptions.find((x) => x.id === r.source_id)?.payment_type !==
+              "TRANSFER") &&
           r.kind !== "CUSTOM" &&
           r.occurrence_date < end &&
           (r.kind !== "RECURRING" ||

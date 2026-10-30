@@ -1,3 +1,11 @@
+import { useRouter } from "expo-router";
+import { FieldControl } from "../features/editor/FieldControl";
+import {
+  currentMode,
+  isFocus,
+  workModes,
+  workModeLabels,
+} from "../domain/workModes";
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -36,27 +44,26 @@ import {
 } from "../ui/kit";
 import { RootStack, useNav } from "../ui/navigation";
 import { Ring } from "../ui/Ring";
-const types: ShiftType[] = [
-  "OFFICE",
-  "WFH",
-  "HALF_DAY",
-  "CUSTOM",
-  "OPEN_ENDED",
-];
+const types = workModes;
 export function HomeScreen() {
   const s = useStore(),
     nav = useNav(),
     now = useNow(),
     t = useTheme();
-  const [type, setType] = useState<ShiftType>(s.settings.defaultShiftType),
-    [custom, setCustom] = useState(String(s.settings.baseline));
+  const [type, setType] = useState<ShiftType>(
+      currentMode(s.settings.defaultShiftType),
+    ),
+    [custom, setCustom] = useState(String(s.settings.baseline)),
+    [startedAt, setStartedAt] = useState<string | null>(null),
+    [showStart, setShowStart] = useState(false);
+  const router = useRouter();
   const active = s.shifts.find((x) => x.status === "ACTIVE"),
     review = s.shifts.find((x) => x.status === "NEEDS_REVIEW");
   const breaks = s.breaks.filter((b) => b.shift_id === active?.id);
   const m = active ? metrics(active, breaks, now) : null;
   useEffect(() => {
     if (!active) {
-      setType(s.settings.defaultShiftType);
+      setType(currentMode(s.settings.defaultShiftType));
       setCustom(String(s.settings.baseline));
     }
   }, [
@@ -66,13 +73,19 @@ export function HomeScreen() {
     active?.id,
   ]);
   const today = active?.work_date ?? workDate(now, s.settings.cutoff);
-  const arrival = shiftStartPlan(now, s.settings, type, Number(custom));
+  const arrival = shiftStartPlan(
+    startedAt ? Date.parse(startedAt) : now,
+    s.settings,
+    type,
+    Number(custom),
+  );
   const muted =
-    s.marks.some((x) => x.work_date === today && x.kind !== "WORKED") ||
-    s.holidays.some((h) => h.holiday_date === today && !h.is_optional);
+    !isFocus(active?.shift_type ?? type) &&
+    (s.marks.some((x) => x.work_date === today && x.kind !== "WORKED") ||
+      s.holidays.some((h) => h.holiday_date === today && !h.is_optional));
   const start = (options: StartOptions = {}) => {
     const plan = shiftStartPlan(
-      Date.now(),
+      startedAt ? Date.parse(startedAt) : Date.now(),
       s.settings,
       type,
       Number(custom),
@@ -107,21 +120,33 @@ export function HomeScreen() {
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    void act(() =>
-      ShiftRepository.start(type, Number(custom), s.settings, options),
+    void act(
+      () =>
+        ShiftRepository.start(type, Number(custom), s.settings, {
+          ...options,
+          startedAt: startedAt ? Date.parse(startedAt) : undefined,
+        }),
+      () => {
+        setStartedAt(null);
+        setShowStart(false);
+      },
     );
   };
   const out = () =>
-    Alert.alert("Finish shift?", "Record your actual swipe-out time now.", [
-      { text: "Keep working", style: "cancel" },
-      {
-        text: "Swipe out",
-        onPress: () => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          void act(() => ShiftRepository.complete(active!));
+    Alert.alert(
+      isFocus(active!.shift_type) ? "Finish timer?" : "Finish shift?",
+      "Save the end time now.",
+      [
+        { text: "Keep working", style: "cancel" },
+        {
+          text: isFocus(active!.shift_type) ? "Stop timer" : "Swipe out",
+          onPress: () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            void act(() => ShiftRepository.complete(active!));
+          },
         },
-      },
-    ]);
+      ],
+    );
   const leave = () =>
     Alert.alert(
       "On leave today?",
@@ -149,7 +174,7 @@ export function HomeScreen() {
     >
       <Row>
         <Label color={t.cyan}>
-          {active?.tracking_mode ?? s.settings.mode} mode
+          {isFocus(active?.shift_type ?? type) ? "Focus" : "Swipe tracking"}
         </Label>
         <Row>
           <Pressable
@@ -187,6 +212,18 @@ export function HomeScreen() {
           />
         </Card>
       )}
+      {!active && (
+        <Chips
+          values={types}
+          labels={workModeLabels}
+          value={type}
+          onChange={(v) => {
+            setType(v);
+            setStartedAt(null);
+            setShowStart(false);
+          }}
+        />
+      )}
       {muted ? (
         <Card>
           <Label size={24}>A day for yourself.</Label>
@@ -211,11 +248,13 @@ export function HomeScreen() {
               <Label size={12} color={t.cyan}>
                 {arrival.requiresRestConfirmation
                   ? "Rest day · No scheduled hours"
-                  : type === "OPEN_ENDED"
-                    ? "Stopwatch · No fixed target"
+                  : isFocus(type)
+                    ? type === "OPEN_ENDED"
+                      ? "Stopwatch · No fixed target"
+                      : "Focus · Your own pace"
                     : `Swipe in by ${clock(arrival.latest)} · Reset ${clock(arrival.cutoff)}`}
               </Label>
-              <Chips values={types} value={type} onChange={setType} />
+
               {type === "CUSTOM" && (
                 <DurationControl
                   value={Number(custom)}
@@ -235,7 +274,8 @@ export function HomeScreen() {
                   : hours(
                       (arrival.requiresRestConfirmation || type === "OPEN_ENDED"
                         ? 0
-                        : arrival.target + s.settings.buffer) * 60000,
+                        : arrival.target +
+                          (isFocus(type) ? 0 : s.settings.buffer)) * 60000,
                     )
               }
               label={
@@ -249,38 +289,79 @@ export function HomeScreen() {
               }
               sub={
                 active
-                  ? `${active.shift_type.replace("_", " ")} · +${active.buffer_minutes}m buffer`
+                  ? `${workModeLabels[active.shift_type]}${active.buffer_minutes ? ` · +${active.buffer_minutes}m buffer` : ""}`
                   : arrival.requiresRestConfirmation
                     ? "No scheduled hours"
-                    : `${type.replace("_", " ")} · +${type === "OPEN_ENDED" ? 0 : s.settings.buffer}m buffer`
+                    : `${workModeLabels[type]}${!isFocus(type) && s.settings.buffer ? ` · +${s.settings.buffer}m buffer` : ""}`
               }
             />
             {active && m && (
               <>
                 <Row>
-                  <Label muted>Swipe in {clock(active.first_swipe_in)}</Label>
+                  <Pressable
+                    accessibilityLabel="Edit swipe-in time"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/edit/[entity]/[field]",
+                        params: {
+                          entity: "worklog",
+                          field: "first_swipe_in",
+                          id: active.id,
+                        },
+                      })
+                    }
+                  >
+                    <Label muted>
+                      Swipe in {clock(active.first_swipe_in)} ✎
+                    </Label>
+                  </Pressable>
                   <Label color={t.cyan}>
                     {active.shift_type === "OPEN_ENDED"
                       ? "No fixed target"
                       : `Target ${clock(m.target)}`}
                   </Label>
                 </Row>
-                <Row>
-                  <Label size={12}>Gross {hours(m.gross)}</Label>
-                  <Label size={12}>Net {hours(m.net)}</Label>
-                </Row>
                 <Label size={12} muted>
-                  Break elapsed {hours(m.pause)}
-                  {active.tracking_mode === "GROSS" ? " · not deducted" : ""}
+                  {isFocus(active.shift_type) ? "Focused" : "Hours tracked"}{" "}
+                  {hours(m.productive)}
                 </Label>
               </>
             )}
             {!active ? (
-              <Button
-                title="Swipe in"
-                disabled={!!review}
-                onPress={() => start()}
-              />
+              <>
+                {showStart && (
+                  <FieldControl
+                    spec={{
+                      key: "startedAt",
+                      label: "Swipe-in time",
+                      type: "datetime",
+                      icon: "time-outline",
+                    }}
+                    value={startedAt ?? new Date().toISOString()}
+                    onChange={(v) => setStartedAt(String(v))}
+                  />
+                )}
+                {!isFocus(type) && (
+                  <Button
+                    title={
+                      startedAt
+                        ? `Swipe in · ${clock(startedAt)}`
+                        : "Missed swipe in?"
+                    }
+                    icon="time-outline"
+                    secondary
+                    onPress={() => {
+                      setStartedAt(new Date().toISOString());
+                      setShowStart(!showStart);
+                    }}
+                  />
+                )}
+                <Button
+                  title={isFocus(type) ? "Start timer" : "Swipe in"}
+                  disabled={!!review}
+                  onPress={() => start()}
+                />
+              </>
             ) : m?.review ? (
               <Button
                 title="Confirm actual swipe out"
@@ -290,25 +371,36 @@ export function HomeScreen() {
               />
             ) : (
               <>
-                <Button title="Swipe out" onPress={out} />
                 <Button
-                  secondary
-                  title={m?.breakActive ? "End break" : "Start break"}
-                  onPress={() =>
-                    void act(() => ShiftRepository.toggleBreak(active))
+                  title={
+                    isFocus(active.shift_type) ? "Stop timer" : "Swipe out"
                   }
+                  onPress={out}
                 />
-                <Button
-                  secondary
-                  title="Break history"
-                  onPress={() =>
-                    nav.navigate("BreakHistory", { shiftId: active.id })
-                  }
-                />
+                {isFocus(active.shift_type) && (
+                  <Button
+                    secondary
+                    title={m?.breakActive ? "End break" : "Start break"}
+                    onPress={() =>
+                      void act(() => ShiftRepository.toggleBreak(active))
+                    }
+                  />
+                )}
+                {breaks.length > 0 && (
+                  <Button
+                    secondary
+                    title="Break history"
+                    onPress={() =>
+                      nav.navigate("BreakHistory", { shiftId: active.id })
+                    }
+                  />
+                )}
               </>
             )}
           </Card>
-          <Button title="On leave today" secondary onPress={leave} />
+          {!isFocus(active?.shift_type ?? type) && (
+            <Button title="On leave today" secondary onPress={leave} />
+          )}
         </>
       )}
     </Page>
@@ -363,6 +455,7 @@ export function CalendarScreen() {
   monday.setHours(0, 0, 0, 0);
   const week = s.shifts.filter(
     (x) =>
+      !isFocus(x.shift_type) &&
       localDate(x.work_date) >= monday &&
       localDate(x.work_date) <= localDate(currentWorkDay),
   );
@@ -389,9 +482,7 @@ export function CalendarScreen() {
     <Page title="Calendar & logs">
       <Row>
         <Label weight>{hours(total)} this week</Label>
-        <Label muted>
-          {office}/{s.settings.officeDays} office days
-        </Label>
+        <Label muted>{office} workdays</Label>
       </Row>
       <Label muted>
         {
@@ -486,8 +577,8 @@ export function CalendarScreen() {
           })}
         </View>
         <Label size={11} muted>
-          Green complete · Blue WFH · Orange partial · Purple holiday · Gray
-          leave / non-working
+          Green complete · Orange partial · Purple holiday · Gray leave /
+          non-working
         </Label>
       </Card>
       <Row>
@@ -525,7 +616,7 @@ export function DayDetailsScreen() {
           <Card key={x.id}>
             <Row>
               <Label weight>
-                {x.shift_type} • {x.status}
+                {workModeLabels[x.shift_type]} • {x.status}
               </Label>
               <Edit
                 onPress={() => nav.navigate("ShiftDetails", { shiftId: x.id })}
@@ -649,7 +740,9 @@ export function ComplianceScreen() {
   const s = useStore(),
     now = useNow(),
     [month, setMonth] = useState(dateKey().slice(0, 7));
-  const list = s.shifts.filter((x) => x.work_date.startsWith(month));
+  const list = s.shifts.filter(
+    (x) => !isFocus(x.shift_type) && x.work_date.startsWith(month),
+  );
   return (
     <Page
       title="Monthly compliance"
@@ -684,7 +777,7 @@ export function ComplianceScreen() {
       {list.map((x) => (
         <Card key={x.id}>
           <Label>
-            {x.work_date} · {x.shift_type}
+            {x.work_date} · {workModeLabels[x.shift_type]}
           </Label>
           <Label muted>
             {hours(

@@ -1,3 +1,4 @@
+import { assertTransactionEditable } from "../domain/transactionPolicy";
 import { z } from "zod";
 import { db, uid } from "../db/connection";
 import type { SQLiteDatabase } from "expo-sqlite";
@@ -124,6 +125,7 @@ export const TransactionRepository = {
         throw Error(
           "Linked and settled entries are protected. Reverse them before editing.",
         );
+      assertTransactionEditable(old.transaction_date);
       await tx.runAsync(
         "UPDATE accounts SET is_active=1 WHERE id=? OR id=?",
         old.account_id,
@@ -154,6 +156,23 @@ export const TransactionRepository = {
         id,
       );
       if (!old) throw Error("Entry unavailable");
+      assertTransactionEditable(old.transaction_date);
+      const linked = await tx.getAllAsync<{ transaction_date: string }>(
+        "SELECT transaction_date FROM ledger WHERE linked_transaction_id=?",
+        id,
+      );
+      for (const entry of linked)
+        assertTransactionEditable(entry.transaction_date);
+      if (
+        await tx.getFirstAsync(
+          "SELECT id FROM lending WHERE transaction_id=? UNION ALL SELECT id FROM lending_repayments WHERE transaction_id=?",
+          id,
+          id,
+        )
+      )
+        throw Error(
+          "Manage this entry from Lending to keep repayments consistent",
+        );
       const involved = await tx.getAllAsync<{
         account_id: string;
         destination_account_id: string | null;
@@ -192,8 +211,10 @@ export const TransactionRepository = {
         "UPDATE emi_payments SET status='PENDING',transaction_id=NULL WHERE transaction_id=?",
         id,
       );
+      // Keep automatic subscription occurrence identities after reversal.
+      // Manual plans can record the occurrence again; auto-post plans never regenerate it.
       await tx.runAsync(
-        "DELETE FROM subscription_payments WHERE transaction_id=?",
+        "DELETE FROM subscription_payments WHERE transaction_id=? AND subscription_id IN (SELECT id FROM subscriptions WHERE auto_post=0)",
         id,
       );
       await tx.runAsync(

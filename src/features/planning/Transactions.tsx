@@ -3,6 +3,7 @@ import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
+import { transactionExpired } from "../../domain/transactionPolicy";
 import { dateKey } from "../../domain/shift";
 import { TransactionRepository } from "../../repositories/TransactionRepository";
 import { useActivityFilters } from "../../state/activity";
@@ -17,6 +18,7 @@ import {
   Page,
   Row,
   useTheme,
+  useNow,
 } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
 import { IconButton, InfoButton, MenuRow, Section } from "../design/primitives";
@@ -235,6 +237,7 @@ export function ActivityFiltersScreen() {
   );
 }
 export function TransactionDetailsScreen() {
+  const now = useNow();
   const { id } = useLocalSearchParams<{ id: string }>(),
     s = useStore(),
     router = useRouter(),
@@ -247,7 +250,12 @@ export function TransactionDetailsScreen() {
         <Label muted>Entry removed</Label>
       </Page>
     );
+  const expired = transactionExpired(tx.transaction_date, now);
+  const lendingLinked =
+    s.lending.some((r) => r.transaction_id === id) ||
+    s.lendingRepayments.some((r) => r.transaction_id === id);
   const locked =
+    expired ||
     tx.ledger_kind !== "PERSONAL" ||
     tx.reimbursement_status === "SETTLED" ||
     !!tx.is_split ||
@@ -266,9 +274,11 @@ export function TransactionDetailsScreen() {
         <InfoButton
           title="Transaction"
           text={
-            locked
-              ? "This payment is linked. Reverse it to undo its effect."
-              : "Tap a value to edit it. Reversing an entry removes its balance effect while keeping the audit record."
+            expired
+              ? "Edits and deletion close 24 hours after the recorded transaction time."
+              : locked
+                ? "This entry is linked to a plan or lending record."
+                : "Tap a value to edit it. Reversing an entry removes its balance effect while keeping the audit record."
           }
         />
       }
@@ -331,29 +341,40 @@ export function TransactionDetailsScreen() {
           />
         ))}
       </Card>
-      <Button
-        title="Reverse entry"
-        icon="trash-outline"
-        secondary
-        onPress={() =>
-          Alert.alert(
-            "Reverse entry?",
-            "Its balance effect will be undone. Linked due items reopen.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Reverse",
-                style: "destructive",
-                onPress: () =>
-                  void act(
-                    () => TransactionRepository.remove(id),
-                    () => nav.goBack(),
-                  ),
-              },
-            ],
-          )
-        }
-      />
+      {expired && (
+        <Label muted size={12}>
+          Locked · 24-hour edit window ended
+        </Label>
+      )}
+      {!expired && !lendingLinked && (
+        <Button
+          title="Delete entry"
+          icon="trash-outline"
+          secondary
+          onPress={() =>
+            Alert.alert(
+              "Delete this transaction?",
+              tx.type === "EXPENSE"
+                ? "Are you sure? The amount will return to the tracked account balance."
+                : tx.type === "INCOME"
+                  ? "Are you sure? The income will be removed from the tracked account balance."
+                  : "Are you sure? The transfer will be reversed in both account balances.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: () =>
+                    void act(
+                      () => TransactionRepository.remove(id),
+                      () => nav.goBack(),
+                    ),
+                },
+              ],
+            )
+          }
+        />
+      )}
     </Page>
   );
 }

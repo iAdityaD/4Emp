@@ -29,7 +29,12 @@ export function BudgetsScreen() {
       <MonthPicker month={month} onChange={setMonth} />
       {!rows.length && <Empty text="No budgets this month" />}
       {rows.map((b) => {
-        const spent = budgetSpent(s.transactions, month, b.category_id);
+        const spent = budgetSpent(
+          s.transactions,
+          month,
+          b.category_id,
+          b.reset_at,
+        );
         return (
           <Pressable
             key={b.id}

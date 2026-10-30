@@ -159,7 +159,8 @@ test("foreign keys enforce relationships and active shift uniqueness; flexible t
   await ShiftRepository.start("CUSTOM", 420, { ...defaultSettings, buffer: 3 });
   const active = (await ShiftRepository.all())[0]!;
   assert.equal(active.target_minutes, 420);
-  assert.equal(active.buffer_minutes, 3);
+  assert.equal(active.buffer_minutes, 0);
+  assert.equal(active.cutoff_at, null);
   await assert.rejects(() =>
     ShiftRepository.start("OFFICE", 0, defaultSettings),
   );
