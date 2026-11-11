@@ -132,7 +132,10 @@ export function HomeScreen() {
         ShiftRepository.start(type, Number(custom), s.settings, {
           ...options,
           startedAt: startedAt ? Date.parse(startedAt) : undefined,
-          label: focusLabel,
+          // Only focus timers carry a label, and only when one was typed.
+          ...(isFocus(type) && focusLabel.trim()
+            ? { label: focusLabel.trim() }
+            : null),
         }),
       () => {
         setFocusLabel("");
