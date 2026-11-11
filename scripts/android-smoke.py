@@ -6,11 +6,19 @@ def dump():
  adb('shell','uiautomator','dump','/sdcard/4emp-window.xml')
  raw=adb('exec-out','cat','/sdcard/4emp-window.xml').decode()
  return ET.fromstring(raw)
+def center(node):
+ nums=list(map(int,re.findall(r'\d+',node.get('bounds'))));return (nums[0]+nums[2])//2,(nums[1]+nums[3])//2
 def locate(text):
- for node in dump().iter('node'):
+ nodes=list(dump().iter('node'))
+ # A slow CI emulator can raise a system "isn't responding" dialog over the app; keep waiting instead of failing.
+ if any("isn't responding" in (n.get('text') or '') for n in nodes):
+  for n in nodes:
+   if n.get('text')=='Wait':adb('shell','input','tap',*center(n));time.sleep(2);break
+  nodes=list(dump().iter('node'))
+ for node in nodes:
   if text in [node.get('text'),node.get('content-desc')]:return node
  return None
-def wait(text,seconds=50):
+def wait(text,seconds=90):
  until=time.monotonic()+seconds
  while time.monotonic()<until:
   node=locate(text)
@@ -18,7 +26,7 @@ def wait(text,seconds=50):
   time.sleep(1)
  raise AssertionError('UI did not show: '+text)
 def tap(text):
- node=wait(text);nums=list(map(int,re.findall(r'\d+',node.get('bounds'))));adb('shell','input','tap',(nums[0]+nums[2])//2,(nums[1]+nums[3])//2);time.sleep(.5)
+ adb('shell','input','tap',*center(wait(text)));time.sleep(.5)
 def scroll_to(text):
  w,h=map(int,re.findall(r'\d+',adb('shell','wm','size').decode())[-2:])
  for _ in range(8):
@@ -71,6 +79,10 @@ try:
  if 'FATAL EXCEPTION' in logs or 'Unable to resolve module' in logs:raise AssertionError('Runtime crash in logcat')
  print('Android UI smoke passed: onboarding, real expense entry, all primary flows and adaptive theme.')
 except Exception:
- try:shot('failure');(out/'logcat.txt').write_bytes(adb('logcat','-d'))
+ try:
+  shot('failure');log=adb('logcat','-d');(out/'logcat.txt').write_bytes(log)
+  # Print what was on screen and any JS/native crash so a failure is diagnosable from the job log alone.
+  print('Visible text at failure:',[n.get('text') or n.get('content-desc') for n in dump().iter('node') if n.get('text') or n.get('content-desc')][:40])
+  print('\n'.join([l for l in log.decode(errors='replace').splitlines() if re.search(r'ReactNativeJS|FATAL EXCEPTION|ANR in|fouremp|SQLite|Choreographer|Hermes',l) and 'uiautomator' not in l][-120:]))
  except Exception:pass
  raise

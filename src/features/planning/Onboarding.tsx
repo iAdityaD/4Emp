@@ -25,24 +25,24 @@ export function OnboardingScreen() {
         >
           <Defs>
             <LinearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#062B36" />
-              <Stop offset="1" stopColor="#12828A" />
+              <Stop offset="0" stopColor="#05080F" />
+              <Stop offset="1" stopColor="#0B3A5C" />
             </LinearGradient>
           </Defs>
           <Rect width={360} height={250} fill="url(#sky)" />
-          <Circle cx={265} cy={65} r={30} fill="#F6DCB2" />
+          <Circle cx={265} cy={65} r={30} fill="#63E6FF" />
           <Path
             d="M0 205 L80 80 L150 170 L210 115 L360 250 L0 250Z"
-            fill="#0B4550"
+            fill="#0C1F36"
           />
           <Path
             d="M0 250 L110 162 L175 210 L255 140 L360 215 L360 250Z"
-            fill="#072E39"
+            fill="#081627"
           />
           <Path
             d="M130 250 Q210 200 185 180 Q170 160 220 140"
             fill="none"
-            stroke="#00C6A1"
+            stroke="#00D1FF"
             strokeWidth={4}
           />
         </Svg>
@@ -50,7 +50,7 @@ export function OnboardingScreen() {
           <Label size={28} weight color="#FFFFFF">
             Your life, in balance.
           </Label>
-          <Label color="#C5E3DF">Money and work, on your terms.</Label>
+          <Label color="#9CC3DC">Money and work, on your terms.</Label>
         </View>
       </View>
       <View
@@ -68,7 +68,7 @@ export function OnboardingScreen() {
           ] as const
         ).map((item) => (
           <View key={item.label} style={{ alignItems: "center", gap: 9 }}>
-            <Ionicons name={item.icon} color={t.accent} size={24} />
+            <Ionicons name={item.icon} color={t.accentInk} size={24} />
             <Label muted size={12}>
               {item.label}
             </Label>

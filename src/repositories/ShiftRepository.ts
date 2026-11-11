@@ -26,6 +26,11 @@ export const ShiftRepository = {
     if (type === "OPEN_ENDED")
       throw Error("Stopwatch has been retired. Choose Focus timer.");
     type = currentMode(type);
+    const label = isFocus(type) ? (options.label ?? "").trim() : "";
+    if (label.length > 80)
+      throw Error("Keep the focus label under 80 characters");
+    if (isFocus(type) && settings.focusLabelRequired && !label)
+      throw Error("Name what you are focusing on first");
     await this.recover();
     const lane = isFocus(type) ? 1 : 0;
     const existing = await db().getFirstAsync<Shift>(
@@ -63,7 +68,7 @@ export const ShiftRepository = {
     )
       throw Error("Choose a target between 1 minute and 24 hours");
     await db().runAsync(
-      "INSERT INTO work_shifts(id,work_date,tracking_mode,shift_type,target_minutes,buffer_minutes,first_swipe_in,status,created_at,cutoff_at) VALUES(?,?,?,?,?,?,?,'ACTIVE',?,?)",
+      "INSERT INTO work_shifts(id,work_date,tracking_mode,shift_type,target_minutes,buffer_minutes,first_swipe_in,status,created_at,cutoff_at,notes) VALUES(?,?,?,?,?,?,?,'ACTIVE',?,?,?)",
       uid(),
       isFocus(type) ? dateKey(now) : plan.day,
       isFocus(type) ? "NET" : "GROSS",
@@ -73,6 +78,7 @@ export const ShiftRepository = {
       new Date(now).toISOString(),
       Date.now(),
       isFocus(type) ? null : new Date(plan.cutoff).toISOString(),
+      label || null,
     );
     await this.recover();
   },

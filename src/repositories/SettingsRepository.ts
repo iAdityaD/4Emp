@@ -1,8 +1,12 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import type { WorkProfile } from "../features/planning/models";
-import { validateSettings } from "../domain/settingsValidation";
+import {
+  recoverSettings,
+  validateSettings,
+} from "../domain/settingsValidation";
 import { db } from "../db/connection";
 import { defaultSettings, Settings } from "../domain/models";
+import { editWindow } from "../domain/transactionPolicy";
 
 type Reader = Pick<SQLiteDatabase, "getAllAsync">;
 async function readSettings(reader: Reader): Promise<Settings> {
@@ -17,7 +21,7 @@ async function readSettings(reader: Reader): Promise<Settings> {
       } catch {
         /* Keep the default for a corrupt legacy preference. */
       }
-  return validateSettings(result);
+  return recoverSettings(result);
 }
 
 async function writeSettings(
@@ -50,6 +54,11 @@ async function writeSettings(
       JSON.stringify(valid[key]),
     );
   }
+}
+
+/** The user's current edit window, read on the caller's own connection. */
+export async function readEditWindow(reader: Reader) {
+  return editWindow(await readSettings(reader));
 }
 
 export const SettingsRepository = {

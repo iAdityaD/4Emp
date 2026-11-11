@@ -82,7 +82,7 @@ export function FinanceCalendarScreen() {
                           height: 4,
                           borderRadius: 2,
                           backgroundColor:
-                            selected === key ? "#FFFFFF" : t.danger,
+                            selected === key ? t.onAccent : t.danger,
                         }}
                       />
                     )}

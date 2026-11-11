@@ -10,14 +10,19 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: t.card,
-          borderTopColor: t.line,
+          borderTopColor: t.glow,
+          borderTopWidth: 1,
           height: 68,
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarActiveTintColor: t.accent,
+        tabBarActiveTintColor: t.accentInk,
         tabBarInactiveTintColor: t.muted,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: "700",
+          letterSpacing: 0.6,
+        },
       }}
     >
       {(

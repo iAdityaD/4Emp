@@ -198,18 +198,20 @@ export function ColorPicker({
       </View>
       <Row>
         {[
+          "#00D1FF",
           "#00A88A",
           "#3B82F6",
           "#A779F5",
           "#F7505E",
           "#E6A23C",
-          "#075A62",
+          "#3DF2B4",
           "#F278A4",
-          "#64748B",
         ].map((c) => (
           <Pressable
             key={c}
+            accessibilityRole="button"
             accessibilityLabel={`Choose color ${c}`}
+            hitSlop={5}
             accessibilityState={{ selected: value.toUpperCase() === c }}
             onPress={() => {
               setHSV(hexToHSV(c));

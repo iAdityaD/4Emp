@@ -4,6 +4,7 @@ import { db, uid } from "../db/connection";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { Transaction, Category } from "../domain/models";
 import { cents } from "../domain/finance";
+import { readEditWindow } from "./SettingsRepository";
 export interface Entry {
   accountId: string;
   destinationId?: string;
@@ -125,7 +126,8 @@ export const TransactionRepository = {
         throw Error(
           "Linked and settled entries are protected. Reverse them before editing.",
         );
-      assertTransactionEditable(old.transaction_date);
+      const window = await readEditWindow(tx);
+      assertTransactionEditable(old.transaction_date, window);
       await tx.runAsync(
         "UPDATE accounts SET is_active=1 WHERE id=? OR id=?",
         old.account_id,
@@ -156,13 +158,14 @@ export const TransactionRepository = {
         id,
       );
       if (!old) throw Error("Entry unavailable");
-      assertTransactionEditable(old.transaction_date);
+      const window = await readEditWindow(tx);
+      assertTransactionEditable(old.transaction_date, window);
       const linked = await tx.getAllAsync<{ transaction_date: string }>(
         "SELECT transaction_date FROM ledger WHERE linked_transaction_id=?",
         id,
       );
       for (const entry of linked)
-        assertTransactionEditable(entry.transaction_date);
+        assertTransactionEditable(entry.transaction_date, window);
       if (
         await tx.getFirstAsync(
           "SELECT id FROM lending WHERE transaction_id=? UNION ALL SELECT id FROM lending_repayments WHERE transaction_id=?",

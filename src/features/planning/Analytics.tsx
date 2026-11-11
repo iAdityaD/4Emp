@@ -6,6 +6,13 @@ import { useStore } from "../../state/store";
 import { Card, Chips, Label, Page, Row, useTheme } from "../../ui/kit";
 import { budgetSpent, monthTotals, personalExpenseMinor } from "./calculations";
 import { Money, Progress } from "./components";
+import {
+  categoryChanges,
+  hourlyRate,
+  subscriptionBurn,
+  upcomingRenewals,
+  workTime,
+} from "./insights";
 import { monthName, MonthPicker } from "./screenKit";
 export function AdvancedAnalyticsScreen() {
   const s = useStore(),
@@ -47,6 +54,22 @@ export function AdvancedAnalyticsScreen() {
     };
   });
   const max = Math.max(1, ...chart.flatMap((r) => [r.income, r.expenses]));
+  // Thresholds, windows and the work-time view all come from the user's rules.
+  const rules = s.settings;
+  const rate = rules.showWorkCost ? hourlyRate(s.salary, rules) : 0;
+  const changes = categoryChanges(
+    s.transactions,
+    s.categories,
+    month,
+    rules.insightChangePercent,
+  ).slice(0, 4);
+  const burn = subscriptionBurn(s.subscriptions);
+  const renewals = upcomingRenewals(
+    s.subscriptions,
+    s.subscriptionPayments,
+    rules.renewalWindowDays,
+  );
+  const renewalTotal = renewals.reduce((n, r) => n + r.amount_minor, 0);
   let offset = 0;
   const circumference = 2 * Math.PI * 55;
   return (
@@ -70,7 +93,72 @@ export function AdvancedAnalyticsScreen() {
           </Label>
         </Row>
         <Money minor={totals.savings} />
+        {workTime(totals.expenses, rate) && (
+          <Row>
+            <Label muted>Expenses in work time</Label>
+            <Label weight>{`≈ ${workTime(totals.expenses, rate)}`}</Label>
+          </Row>
+        )}
       </Card>
+      {changes.length > 0 && (
+        <Card>
+          <Label weight>What changed</Label>
+          {changes.map((c) => (
+            <Row key={c.id}>
+              <View style={{ flex: 1 }}>
+                <Label>{c.name}</Label>
+                <Label
+                  size={12}
+                  color={
+                    c.percent === null || c.percent > 0 ? t.danger : t.success
+                  }
+                >
+                  {c.percent === null
+                    ? "New this month"
+                    : `${c.percent > 0 ? "Up" : "Down"} ${Math.abs(c.percent)}% on last month`}
+                </Label>
+              </View>
+              <Money minor={c.current} />
+            </Row>
+          ))}
+        </Card>
+      )}
+      {(burn > 0 || renewals.length > 0) && (
+        <Card>
+          <Label weight>Subscriptions</Label>
+          <Row>
+            <View style={{ flex: 1 }}>
+              <Label muted>Average per month</Label>
+              {workTime(burn, rate) && (
+                <Label muted size={12}>
+                  {`≈ ${workTime(burn, rate)} of work`}
+                </Label>
+              )}
+            </View>
+            <Money minor={burn} />
+          </Row>
+          <Row>
+            <Label
+              muted
+            >{`Due in the next ${rules.renewalWindowDays} days`}</Label>
+            <Money minor={renewalTotal} />
+          </Row>
+          {renewals.slice(0, 5).map((r) => (
+            <Row key={`${r.id}-${r.date}`}>
+              <View style={{ flex: 1 }}>
+                <Label>{r.title}</Label>
+                <Label muted size={12}>
+                  {localDate(r.date).toLocaleDateString([], {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </Label>
+              </View>
+              <Money minor={r.amount_minor} />
+            </Row>
+          ))}
+        </Card>
+      )}
       <Chips
         values={["6", "12"]}
         labels={{ "6": "6 months", "12": "12 months" }}

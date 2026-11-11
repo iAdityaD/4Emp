@@ -4,7 +4,7 @@ A local-first Android app built with Expo SDK 53, React Native, Expo Router, str
 
 ## Daily experience
 
-The reference-inspired interface uses warm light surfaces, an OLED dark theme, a teal balance card, clear income/expense colors, SVG charts and a circular shift timer. The five primary tabs are Home, Activity, Work, Plan and Settings. Insights open from the spending chart. Dedicated routes cover account/category editors, transaction corrections, salary and recurring rules, loan details and amortization, subscription renewals, monthly budgets, savings goals and contributions, finance calendar, due-item details, reminder configuration, work profiles, weekly targets, manual logs, break corrections, holiday/calendar reports, security and backup.
+The interface uses a sci-fi "deep space" theme: near-black navy panels with HUD corner brackets and an electric-cyan accent in dark mode, a cool daylight variant in light mode, a fixed-navy balance console, clear income/expense colors, SVG charts and a circular shift timer with fixed-width digits. All colors come from `src/features/design/theme.ts`; text and status colors are contrast-tested (WCAG AA) in both modes, and any user-chosen accent is automatically adjusted when it is used as text. The five primary tabs are Home, Activity, Work, Plan and Settings. Insights open from the spending chart. Dedicated routes cover account/category editors, transaction corrections, salary and recurring rules, loan details and amortization, subscription renewals, monthly budgets, savings goals and contributions, finance calendar, due-item details, reminder configuration, work profiles, weekly targets, manual logs, break corrections, holiday/calendar reports, security and backup.
 
 Financial screens start with your actual data. Starter accounts/categories and work defaults are editable. Add unlimited bank/cash/wallet accounts, custom category icons/colors, any three-letter currency display code, an accent color, your own work durations and billing schedules. Currency changes do not convert money. Date and clock fields open native pickers. Durations use separate hours/minutes and loan terms use years/months. A touch-driven hue/saturation/value picker and presets customize colors without typing hex codes.
 
@@ -23,7 +23,7 @@ Settings and records are compact summaries. Tap a value to open its focused edit
 - Safe-to-spend subtracts active goal reservations and unpaid obligations through the configured cycle end, then divides by remaining cycle days. Overdue obligations remain reserved. Transfers and expected future income do not inflate this value. Negative amounts show a shortfall.
 - Corporate reimbursement settlement is atomic and idempotent, credits the chosen account, and is excluded from personal income. Split models remain forward-compatible; peer splitting is still explicitly Coming Soon.
 
-Transactions stay in Activity with filtering, category, account and timestamp details. Edit/delete close **exactly 24 hours after the recorded transaction timestamp**, including backdated entries. The repository enforces this even if an editor was opened earlier. Deletion requires confirmation, soft-voids the record and reverses its account effects: expenses return funds, income removes funds, and transfers reverse both sides. Linked plan entries retain their own integrity restrictions. Deleted audit rows are retained in SQLite backups.
+Transactions stay in Activity with filtering, category, account and timestamp details. Edit/delete close **when your edit window ends (24 hours after the recorded transaction timestamp by default; see Your rules)**, including backdated entries. The repository enforces this even if an editor was opened earlier. Deletion requires confirmation, soft-voids the record and reverses its account effects: expenses return funds, income removes funds, and transfers reverse both sides. Linked plan entries retain their own integrity restrictions. Deleted audit rows are retained in SQLite backups.
 
 ## Work engine
 
@@ -62,3 +62,17 @@ This remains a development-key preview. A data-preserving in-place upgrade requi
 ## Work & Focus update (3.3)
 
 The Work tab opens daily analytics and work schedules directly. Analytics split sessions at local midnight, subtract focus pauses, and report work and focus separately without adding overlapping time. Schedules have editable time, weekdays and workday / leave-and-days-off scope; Settings retains global notification permissions and preferences. Migration 6 allows one active work session and one active focus session and preserves existing logs. The launcher uses a new mint geometric 4 icon; see assets/icon-prompt.md for provenance.
+
+## Your rules
+
+Settings › Rules is where behaviour is decided by you instead of by the app. Every rule is declared once in `src/features/rules/registry.ts`; the Rules screen and its editors are generated from that list.
+
+- **Lock old entries / Edit window:** how long after its recorded time a transaction can be edited or reversed (default 24 hours, 1 hour to 1 year), or never lock at all. The repository enforces the same rule the screens show.
+- **Auto-post catch-up:** how far back automatic posting may fill in missed dates (default 35 days, 0 = no limit). Older dates stay visible as due items to record yourself, so a plan with an old start date cannot debit an account many times at once.
+- **Require a focus label:** ask what you are working on before a focus timer starts.
+- **Sections shown in Plan:** budgets, savings goals, loans, lending, employer claims and monthly bills can each be hidden. Hiding a section never deletes its records.
+
+- **Quick entries:** how many one-tap shortcuts New entry offers. They are your own repeated entries (same amount, account, category and note at least twice in 90 days) plus "Repeat last".
+- **Spending change alert / Renewal look-ahead / Show cost in work time:** what Insights points out. "What changed" lists categories that moved past your threshold against last month; Subscriptions shows the average monthly cost and unpaid renewals in your window; work time converts spending into hours using active salary divided by the hours your work schedule plans per month.
+
+Focus timers can carry a label. Work & focus analytics show the share of each workday spent in focus (focus that overlaps work sessions, net of pauses) and the week's focus time per label.

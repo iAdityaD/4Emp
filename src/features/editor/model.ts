@@ -22,6 +22,7 @@ import { useStore } from "../../state/store";
 import { durationText } from "../design/color";
 import { IconName } from "../design/primitives";
 import { LendingRepository } from "../../repositories/LendingRepository";
+import { rules } from "../rules/registry";
 export type Entity =
   | "lending"
   | "repayment"
@@ -333,6 +334,8 @@ export const preferenceFields = [
   f("workNotifications", "Work alerts", "toggle", "time-outline"),
   f("financeNotifications", "Finance alerts", "toggle", "wallet-outline"),
   f("financeReminderMinute", "Finance alert time", "time", "alarm-outline"),
+  // User rules are declared once in the registry and edited like any setting.
+  ...rules.map((r) => f(r.key, r.label, r.type, r.icon)),
 ];
 export const planNames: Record<PlanKind, string> = {
   salary: "Salary",
@@ -407,10 +410,11 @@ export function fieldsFor(entity: Entity, kind?: PlanKind): FieldSpec[] {
   return entity === "due"
     ? dueFields
     : entity === "entry"
-      ? transactionFields.filter((f) =>
-          ["note", "tags", "transaction_date", "is_reimbursable"].includes(
-            f.key,
-          ),
+      ? transactionFields.filter(
+          (f) =>
+            ["note", "tags", "transaction_date"].includes(f.key) ||
+            (f.key === "is_reimbursable" &&
+              useStore.getState().settings.moduleReimbursements),
         )
       : entity === "bill"
         ? billFields

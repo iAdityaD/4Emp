@@ -4,7 +4,7 @@ import { Pressable, View } from "react-native";
 import { cycle } from "../../domain/finance";
 import { dateKey } from "../../domain/shift";
 import { useStore } from "../../state/store";
-import { Card, Label, Page, Row, useTheme } from "../../ui/kit";
+import { Brackets, Card, Label, Page, Row, useTheme } from "../../ui/kit";
 import { useNav } from "../../ui/navigation";
 import { Donut, Sparkline } from "../design/charts";
 import { balanceSeries } from "../design/metrics";
@@ -61,6 +61,8 @@ export function FinanceDashboardScreen() {
     ...(uncategorized ? [{ value: uncategorized, color: t.muted }] : []),
   ];
   const trend = balanceSeries(s.transactions, balance);
+  // The balance console is a fixed deep-navy panel in both modes, so its inks are fixed too.
+  const hero = { panel: "#071626", label: "#9CC3DC", trace: "#63E6FF" };
   return (
     <Page
       title="4emp"
@@ -79,26 +81,30 @@ export function FinanceDashboardScreen() {
     >
       <View
         style={{
-          backgroundColor: "#075A62",
-          borderRadius: 26,
+          backgroundColor: hero.panel,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: t.glow,
           padding: 21,
           gap: 8,
         }}
       >
+        <Brackets color={hero.trace} />
         <Row>
-          <Label color="#C1E8E4" size={11}>
+          <Label color={hero.label} size={11} weight>
             TOTAL BALANCE
           </Label>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Show or hide balances"
             onPress={() => void s.configure("hideBalances", !hidden)}
+            hitSlop={8}
             style={{ padding: 8 }}
           >
             <Ionicons
               name={hidden ? "eye-off-outline" : "eye-outline"}
               size={21}
-              color="#C1E8E4"
+              color={hero.label}
             />
           </Pressable>
         </Row>
@@ -106,25 +112,25 @@ export function FinanceDashboardScreen() {
         {!hidden && (
           <Sparkline
             values={trend.map((p) => p.value)}
-            color="#6ADBC3"
+            color={hero.trace}
             height={52}
           />
         )}
         <Row>
           <View>
-            <Label size={11} color="#C1E8E4">
+            <Label size={11} color={hero.label}>
               Available
             </Label>
             <Money minor={available} color="#FFFFFF" hidden={hidden} />
           </View>
           <View>
-            <Label size={11} color="#C1E8E4">
+            <Label size={11} color={hero.label}>
               Reserved
             </Label>
             <Money minor={reserved} color="#FFFFFF" hidden={hidden} />
           </View>
           <View>
-            <Label size={11} color="#C1E8E4">
+            <Label size={11} color={hero.label}>
               Due
             </Label>
             <Money minor={committed} color="#FFFFFF" hidden={hidden} />

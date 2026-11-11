@@ -3,7 +3,12 @@ import { FlashList } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
-import { transactionExpired } from "../../domain/transactionPolicy";
+import {
+  editWindow,
+  editWindowAdjective,
+  editWindowText,
+  transactionExpired,
+} from "../../domain/transactionPolicy";
 import { dateKey } from "../../domain/shift";
 import { TransactionRepository } from "../../repositories/TransactionRepository";
 import { useActivityFilters } from "../../state/activity";
@@ -250,7 +255,8 @@ export function TransactionDetailsScreen() {
         <Label muted>Entry removed</Label>
       </Page>
     );
-  const expired = transactionExpired(tx.transaction_date, now);
+  const lockAfter = editWindow(s.settings);
+  const expired = transactionExpired(tx.transaction_date, now, lockAfter);
   const lendingLinked =
     s.lending.some((r) => r.transaction_id === id) ||
     s.lendingRepayments.some((r) => r.transaction_id === id);
@@ -275,7 +281,7 @@ export function TransactionDetailsScreen() {
           title="Transaction"
           text={
             expired
-              ? "Edits and deletion close 24 hours after the recorded transaction time."
+              ? `Edits and deletion close ${editWindowText(lockAfter)} after the recorded transaction time. You can change this in Settings › Rules.`
               : locked
                 ? "This entry is linked to a plan or lending record."
                 : "Tap a value to edit it. Reversing an entry removes its balance effect while keeping the audit record."
@@ -343,7 +349,7 @@ export function TransactionDetailsScreen() {
       </Card>
       {expired && (
         <Label muted size={12}>
-          Locked · 24-hour edit window ended
+          {`Locked · ${editWindowAdjective(lockAfter)} edit window ended`}
         </Label>
       )}
       {!expired && !lendingLinked && (

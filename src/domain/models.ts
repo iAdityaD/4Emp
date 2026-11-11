@@ -94,6 +94,21 @@ export interface Reminder {
   enabled: boolean;
 }
 export interface Settings {
+  /** User rules. Declared for the UI in src/features/rules/registry.ts. */
+  editLock: boolean;
+  editWindowHours: number;
+  autoPostCatchUpDays: number;
+  focusLabelRequired: boolean;
+  quickEntryCount: number;
+  insightChangePercent: number;
+  renewalWindowDays: number;
+  showWorkCost: boolean;
+  moduleBudgets: boolean;
+  moduleGoals: boolean;
+  moduleLoans: boolean;
+  moduleLending: boolean;
+  moduleReimbursements: boolean;
+  moduleBills: boolean;
   focusNotifications: boolean;
   focusTarget: number;
   shiftWarningMinutes: number;
@@ -122,9 +137,23 @@ export interface Settings {
   defaultShiftType: ShiftType;
 }
 export const defaultSettings: Settings = {
+  editLock: true,
+  editWindowHours: 24,
+  autoPostCatchUpDays: 35,
+  focusLabelRequired: false,
+  quickEntryCount: 4,
+  insightChangePercent: 20,
+  renewalWindowDays: 30,
+  showWorkCost: true,
+  moduleBudgets: true,
+  moduleGoals: true,
+  moduleLoans: true,
+  moduleLending: true,
+  moduleReimbursements: true,
+  moduleBills: true,
   focusNotifications: true,
   focusTarget: 25,
-  accent: "#00A88A",
+  accent: "#00D1FF",
   financeReminderMinute: 540,
   hideBalances: false,
   weekTargets: [510, 510, 510, 510, 510, 0, 0],

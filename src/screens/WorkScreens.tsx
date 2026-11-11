@@ -55,6 +55,7 @@ export function HomeScreen() {
     ),
     [custom, setCustom] = useState(String(s.settings.focusTarget)),
     [startedAt, setStartedAt] = useState<string | null>(null),
+    [focusLabel, setFocusLabel] = useState(""),
     [showStart, setShowStart] = useState(false);
   const router = useRouter();
   const workActive = s.shifts.find(
@@ -131,8 +132,13 @@ export function HomeScreen() {
         ShiftRepository.start(type, Number(custom), s.settings, {
           ...options,
           startedAt: startedAt ? Date.parse(startedAt) : undefined,
+          // Only focus timers carry a label, and only when one was typed.
+          ...(isFocus(type) && focusLabel.trim()
+            ? { label: focusLabel.trim() }
+            : null),
         }),
       () => {
+        setFocusLabel("");
         setStartedAt(null);
         setShowStart(false);
       },
@@ -184,6 +190,7 @@ export function HomeScreen() {
         </Label>
         <Row>
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Work and focus analytics"
             onPress={() => nav.navigate("WorkAnalytics")}
             style={{ padding: 12 }}
@@ -240,7 +247,7 @@ export function HomeScreen() {
       }
       {(workActive || focusActive) && (
         <Row>
-          <Label size={12} color={workActive ? t.accent : t.muted}>
+          <Label size={12} color={workActive ? t.accentInk : t.muted}>
             {workActive ? "Work running" : "Work not started"}
           </Label>
           <Label size={12} color={focusActive ? t.cyan : t.muted}>
@@ -288,10 +295,21 @@ export function HomeScreen() {
               </Label>
 
               {type === "CUSTOM" && (
-                <DurationControl
-                  value={Number(custom)}
-                  onChange={(v) => setCustom(String(v))}
-                />
+                <>
+                  <DurationControl
+                    value={Number(custom)}
+                    onChange={(v) => setCustom(String(v))}
+                  />
+                  <Field
+                    label={
+                      s.settings.focusLabelRequired
+                        ? "Focus label"
+                        : "Focus label · optional"
+                    }
+                    value={focusLabel}
+                    onChange={setFocusLabel}
+                  />
+                </>
               )}
             </>
           )}
@@ -588,9 +606,9 @@ export function CalendarScreen() {
                       now,
                     ).remaining === 0),
               )
-                ? t.accent
+                ? t.success
                 : t.orange;
-            else if (mark?.kind === "WORKED") color = t.accent;
+            else if (mark?.kind === "WORKED") color = t.success;
             return (
               <Pressable
                 key={i}

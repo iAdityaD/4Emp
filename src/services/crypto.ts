@@ -72,7 +72,7 @@ export function csv(rows: unknown[][]) {
       row
         .map((value) => {
           let text = String(value ?? "");
-          if (typeof value === "string" && /^[=+@\-]/.test(text))
+          if (typeof value === "string" && /^[=+@\-\t\r]/.test(text))
             text = "'" + text;
           return '"' + text.replaceAll('"', '""') + '"';
         })

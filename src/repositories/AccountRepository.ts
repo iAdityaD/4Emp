@@ -55,11 +55,19 @@ export const AccountRepository = {
         throw Error("Update active financial plans using this account first");
     if (
       await db().getFirstAsync(
-        "SELECT id FROM recurring_rules WHERE destination_account_id=? AND is_active=1",
+        "SELECT id FROM recurring_rules WHERE destination_account_id=? AND is_active=1 AND type='TRANSFER'",
         id,
       )
     )
       throw Error("Update recurring transfers using this destination first");
+    // Investment/SIP plans transfer into a destination account as well.
+    if (
+      await db().getFirstAsync(
+        "SELECT id FROM subscriptions WHERE destination_account_id=? AND is_active=1 AND payment_type='TRANSFER'",
+        id,
+      )
+    )
+      throw Error("Update investment plans using this destination first");
     const reserved = await db().getFirstAsync<{ n: number }>(
       "SELECT COALESCE(SUM(c.amount_minor),0) n FROM goal_contributions c JOIN savings_goals g ON g.id=c.goal_id WHERE c.account_id=? AND g.is_active=1",
       id,

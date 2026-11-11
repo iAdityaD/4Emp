@@ -19,7 +19,9 @@ export function PlanningScreen() {
   const s = useStore(),
     nav = useNav(),
     t = useTheme(),
-    month = dateKey().slice(0, 7);
+    month = dateKey().slice(0, 7),
+    // Sections follow the user's rules (Settings › Rules); hiding one never removes its data.
+    on = s.settings;
   const saved = s.goals
       .filter((g) => g.is_active)
       .reduce(
@@ -59,64 +61,74 @@ export function PlanningScreen() {
       }
     >
       <View style={{ flexDirection: "row", gap: 14 }}>
-        <View style={{ flex: 1 }}>
-          <Card>
-            <ProgressOrbit
-              size={100}
-              value={limit ? spent / limit : 0}
-              color={spent > limit ? t.danger : t.accent}
-            />
-            <Label size={12} weight>
-              Budget used
-            </Label>
-            <Label muted size={11}>
-              {limit
-                ? currency(spent / 100, s.settings.currency)
-                : "No budget set"}
-            </Label>
-          </Card>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Card>
-            <ProgressOrbit
-              size={100}
-              value={target ? saved / target : 0}
-              color={t.cyan}
-            />
-            <Label size={12} weight>
-              Goals saved
-            </Label>
-            <Label muted size={11}>
-              {currency(saved / 100, s.settings.currency)}
-            </Label>
-          </Card>
-        </View>
+        {on.moduleBudgets && (
+          <View style={{ flex: 1 }}>
+            <Card>
+              <ProgressOrbit
+                size={100}
+                value={limit ? spent / limit : 0}
+                color={spent > limit ? t.danger : t.accent}
+              />
+              <Label size={12} weight>
+                Budget used
+              </Label>
+              <Label muted size={11}>
+                {limit
+                  ? currency(spent / 100, s.settings.currency)
+                  : "No budget set"}
+              </Label>
+            </Card>
+          </View>
+        )}
+        {on.moduleGoals && (
+          <View style={{ flex: 1 }}>
+            <Card>
+              <ProgressOrbit
+                size={100}
+                value={target ? saved / target : 0}
+                color={t.cyan}
+              />
+              <Label size={12} weight>
+                Goals saved
+              </Label>
+              <Label muted size={11}>
+                {currency(saved / 100, s.settings.currency)}
+              </Label>
+            </Card>
+          </View>
+        )}
       </View>
       <Section title="Your plans" />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        <FeatureCard
-          title="Budgets"
-          icon="pie-chart-outline"
-          value={String(budget.length)}
-          caption="This month"
-          onPress={() => nav.navigate("Budgets")}
-        />
-        <FeatureCard
-          title="Goals"
-          icon="flag-outline"
-          color={t.cyan}
-          value={String(s.goals.filter((g) => g.is_active).length)}
-          caption="Active"
-          onPress={() => nav.navigate("Goals")}
-        />
-        <FeatureCard
-          title="Loans & EMIs"
-          icon="card-outline"
-          color={t.purple}
-          value={currency(emi / 100, s.settings.currency)}
-          caption="Monthly EMI"
-          onPress={() => nav.navigate("Loans")}
-        />
+        {on.moduleBudgets && (
+          <FeatureCard
+            title="Budgets"
+            icon="pie-chart-outline"
+            value={String(budget.length)}
+            caption="This month"
+            onPress={() => nav.navigate("Budgets")}
+          />
+        )}
+        {on.moduleGoals && (
+          <FeatureCard
+            title="Goals"
+            icon="flag-outline"
+            color={t.cyan}
+            value={String(s.goals.filter((g) => g.is_active).length)}
+            caption="Active"
+            onPress={() => nav.navigate("Goals")}
+          />
+        )}
+        {on.moduleLoans && (
+          <FeatureCard
+            title="Loans & EMIs"
+            icon="card-outline"
+            color={t.purple}
+            value={currency(emi / 100, s.settings.currency)}
+            caption="Monthly EMI"
+            onPress={() => nav.navigate("Loans")}
+          />
+        )}
         <FeatureCard
           title="Subscriptions"
           icon="repeat-outline"
@@ -143,27 +155,43 @@ export function PlanningScreen() {
             icon: "notifications-outline",
             onPress: () => nav.navigate("Reminders"),
           },
-          {
-            label: "Claims",
-            icon: "business-outline",
-            onPress: () => nav.navigate("Reimbursements"),
-          },
+          ...(on.moduleReimbursements
+            ? [
+                {
+                  label: "Claims",
+                  icon: "business-outline" as const,
+                  onPress: () => nav.navigate("Reimbursements"),
+                },
+              ]
+            : []),
         ]}
       />
-      <Card>
-        <MenuRow
-          title="Lending"
-          icon="people-outline"
-          value={String(s.lending.length)}
-          onPress={() => nav.navigate("Lending")}
-        />
-        <MenuRow
-          title="Monthly bills"
-          icon="receipt-outline"
-          value={String(s.commitments.length)}
-          onPress={() => nav.navigate("Commitments")}
-        />
-      </Card>
+      {(on.moduleLending || on.moduleBills) && (
+        <Card>
+          {on.moduleLending && (
+            <MenuRow
+              title="Lending"
+              icon="people-outline"
+              value={String(s.lending.length)}
+              onPress={() => nav.navigate("Lending")}
+            />
+          )}
+          {on.moduleBills && (
+            <MenuRow
+              title="Monthly bills"
+              icon="receipt-outline"
+              value={String(s.commitments.length)}
+              onPress={() => nav.navigate("Commitments")}
+            />
+          )}
+        </Card>
+      )}
+      <MenuRow
+        title="Choose what appears here"
+        icon="options-outline"
+        value="Rules"
+        onPress={() => nav.navigate("Rules")}
+      />
     </Page>
   );
 }

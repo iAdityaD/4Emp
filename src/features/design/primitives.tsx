@@ -23,15 +23,19 @@ export function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      hitSlop={4}
       style={({ pressed }) => ({
         width: 44,
         height: 44,
-        borderRadius: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: filled ? t.accent : t.line,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: filled ? t.accent : t.line,
+        backgroundColor: filled ? t.accent : t.inset,
         opacity: pressed || disabled ? 0.5 : 1,
       })}
     >
@@ -64,16 +68,30 @@ export function Section({
   const t = useTheme();
   return (
     <Row>
-      <Label size={16} weight>
-        {title}
-      </Label>
+      <View
+        accessibilityRole="header"
+        style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+      >
+        <View
+          style={{
+            width: 3,
+            height: 16,
+            borderRadius: 2,
+            backgroundColor: t.accent,
+          }}
+        />
+        <Label size={16} weight>
+          {title}
+        </Label>
+      </View>
       {action && onPress && (
         <Pressable
           accessibilityRole="button"
           onPress={onPress}
-          style={{ paddingVertical: 8 }}
+          hitSlop={8}
+          style={{ paddingVertical: 12, paddingHorizontal: 4 }}
         >
-          <Label color={t.accent} size={12} weight>
+          <Label color={t.accentInk} size={12} weight>
             {action}
           </Label>
         </Pressable>
@@ -112,13 +130,13 @@ export function MenuRow({
           style={{
             width: 38,
             height: 38,
-            borderRadius: 13,
-            backgroundColor: (color ?? t.accent) + "16",
+            borderRadius: 10,
+            backgroundColor: (color ?? t.accent) + "1F",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Ionicons name={icon} color={color ?? t.accent} size={20} />
+          <Ionicons name={icon} color={color ?? t.accentInk} size={20} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Label weight>{title}</Label>
@@ -168,13 +186,15 @@ export function ActionDock({
             style={{
               width: 48,
               height: 48,
-              borderRadius: 17,
-              backgroundColor: (a.color ?? t.accent) + "18",
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: (a.color ?? t.accent) + "59",
+              backgroundColor: (a.color ?? t.accent) + "1F",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Ionicons name={a.icon} color={a.color ?? t.accent} size={23} />
+            <Ionicons name={a.icon} color={a.color ?? t.accentInk} size={23} />
           </View>
           <Label size={11} weight>
             {a.label}
@@ -213,13 +233,13 @@ export function FeatureCard({
             style={{
               width: 42,
               height: 42,
-              borderRadius: 14,
-              backgroundColor: (color ?? t.accent) + "18",
+              borderRadius: 10,
+              backgroundColor: (color ?? t.accent) + "1F",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Ionicons name={icon} color={color ?? t.accent} size={23} />
+            <Ionicons name={icon} color={color ?? t.accentInk} size={23} />
           </View>
           <Ionicons name="arrow-forward-outline" size={16} color={t.muted} />
         </Row>

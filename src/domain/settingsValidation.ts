@@ -2,6 +2,20 @@ import { z } from "zod";
 import { defaultSettings, Settings } from "./models";
 const minute = z.number().int().min(0).max(1439);
 export const settingsSchema = z.object({
+  editLock: z.boolean().default(true),
+  editWindowHours: z.number().int().min(1).max(8760).default(24),
+  autoPostCatchUpDays: z.number().int().min(0).max(3660).default(35),
+  focusLabelRequired: z.boolean().default(false),
+  quickEntryCount: z.number().int().min(0).max(8).default(4),
+  insightChangePercent: z.number().int().min(1).max(500).default(20),
+  renewalWindowDays: z.number().int().min(1).max(365).default(30),
+  showWorkCost: z.boolean().default(true),
+  moduleBudgets: z.boolean().default(true),
+  moduleGoals: z.boolean().default(true),
+  moduleLoans: z.boolean().default(true),
+  moduleLending: z.boolean().default(true),
+  moduleReimbursements: z.boolean().default(true),
+  moduleBills: z.boolean().default(true),
   focusNotifications: z.boolean().default(true),
   focusTarget: z.number().int().min(1).max(1440).default(25),
   baseline: z.number().int().min(1).max(1440),
@@ -49,4 +63,22 @@ export const settingsSchema = z.object({
 });
 export function validateSettings(partial: unknown): Settings {
   return settingsSchema.parse({ ...defaultSettings, ...(partial as object) });
+}
+/**
+ * Reading must survive a damaged or outdated stored preference. Each invalid
+ * value falls back to its default instead of locking the user out of the app.
+ * Writes and restores keep using the strict validateSettings.
+ */
+export function recoverSettings(partial: unknown): Settings {
+  const merged: Record<string, unknown> = {
+    ...defaultSettings,
+    ...(partial as object),
+  };
+  if (settingsSchema.safeParse(merged).success) return validateSettings(merged);
+  const shape = settingsSchema.shape as Record<string, z.ZodType>;
+  const defaults = defaultSettings as unknown as Record<string, unknown>;
+  for (const key of Object.keys(shape))
+    if (!shape[key]!.safeParse(merged[key]).success)
+      merged[key] = defaults[key];
+  return validateSettings(merged);
 }

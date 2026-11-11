@@ -117,7 +117,7 @@ export function SubscriptionDetailsScreen() {
             backgroundColor: t.accent + "18",
           }}
         >
-          <Ionicons name="repeat-outline" size={36} color={t.accent} />
+          <Ionicons name="repeat-outline" size={36} color={t.accentInk} />
         </View>
         <Money minor={r.amount_minor} large />
         <Label muted>
