@@ -71,6 +71,10 @@ try:
  if 'FATAL EXCEPTION' in logs or 'Unable to resolve module' in logs:raise AssertionError('Runtime crash in logcat')
  print('Android UI smoke passed: onboarding, real expense entry, all primary flows and adaptive theme.')
 except Exception:
- try:shot('failure');(out/'logcat.txt').write_bytes(adb('logcat','-d'))
+ try:
+  shot('failure');log=adb('logcat','-d');(out/'logcat.txt').write_bytes(log)
+  # Print what was on screen and any JS/native crash so a failure is diagnosable from the job log alone.
+  print('Visible text at failure:',[n.get('text') or n.get('content-desc') for n in dump().iter('node') if n.get('text') or n.get('content-desc')][:40])
+  print('\n'.join([l for l in log.decode(errors='replace').splitlines() if re.search(r'ReactNativeJS|AndroidRuntime|FATAL EXCEPTION|com\.fouremp\.app.*(crash|died)',l)][-60:]))
  except Exception:pass
  raise
