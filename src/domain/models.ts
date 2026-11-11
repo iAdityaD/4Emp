@@ -99,6 +99,10 @@ export interface Settings {
   editWindowHours: number;
   autoPostCatchUpDays: number;
   focusLabelRequired: boolean;
+  quickEntryCount: number;
+  insightChangePercent: number;
+  renewalWindowDays: number;
+  showWorkCost: boolean;
   moduleBudgets: boolean;
   moduleGoals: boolean;
   moduleLoans: boolean;
@@ -137,6 +141,10 @@ export const defaultSettings: Settings = {
   editWindowHours: 24,
   autoPostCatchUpDays: 35,
   focusLabelRequired: false,
+  quickEntryCount: 4,
+  insightChangePercent: 20,
+  renewalWindowDays: 30,
+  showWorkCost: true,
   moduleBudgets: true,
   moduleGoals: true,
   moduleLoans: true,

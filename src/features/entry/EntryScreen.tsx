@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { parseAmount } from "../../domain/finance";
+import { currency, parseAmount } from "../../domain/finance";
 import { Transaction } from "../../domain/models";
 import { TransactionRepository } from "../../repositories/TransactionRepository";
 import { useEntryOptions } from "../../state/entryOptions";
@@ -23,6 +23,7 @@ import { IconButton, MenuRow } from "../design/primitives";
 import { fieldsFor, formatField, recordFor } from "../editor/model";
 import { openField } from "../editor/Screens";
 import { AccountChoice } from "../planning/components";
+import { frequentEntries, lastEntry, QuickEntry } from "../planning/insights";
 export function EntryScreen() {
   const p = useLocalSearchParams<{ type?: Transaction["type"] }>(),
     s = useStore(),
@@ -99,6 +100,28 @@ export function EntryScreen() {
         <Button title="Add account" onPress={() => nav.navigate("Accounts")} />
       </Page>
     );
+  // One-tap shortcuts built from the user's own history; the count is their rule.
+  const usable = (q: QuickEntry) =>
+    s.accounts.some((a) => a.id === q.account_id) &&
+    (q.type !== "TRANSFER" ||
+      s.accounts.some((a) => a.id === q.destination_account_id));
+  const last = s.settings.quickEntryCount
+    ? lastEntry(s.transactions, type)
+    : null;
+  const shortcuts = [
+    ...(last ? [{ ...last, title: "Repeat last" }] : []),
+    ...frequentEntries(s.transactions, type, s.settings.quickEntryCount).map(
+      (q) => ({ ...q, title: `${q.count}×` }),
+    ),
+  ].filter(usable);
+  const applyShortcut = (q: QuickEntry) => {
+    setAmount(String(q.amount_minor / 100));
+    setAccount(q.account_id);
+    if (q.destination_account_id) setDestination(q.destination_account_id);
+    if (q.category_id && list.some((c) => c.id === q.category_id))
+      setCategory(q.category_id);
+    useEntryOptions.getState().setField("note", q.note);
+  };
   return (
     <Page
       title="New entry"
@@ -110,6 +133,45 @@ export function EntryScreen() {
         />
       }
     >
+      {shortcuts.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+        >
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {shortcuts.map((q, i) => {
+              const detail =
+                q.note ||
+                s.categories.find((c) => c.id === q.category_id)?.name ||
+                "";
+              const text = `${q.title} · ${currency(q.amount_minor / 100, s.settings.currency)}${detail ? ` · ${detail}` : ""}`;
+              return (
+                <Pressable
+                  key={`${q.title}-${i}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Quick entry, ${text}`}
+                  onPress={() => applyShortcut(q)}
+                  style={({ pressed }) => ({
+                    minHeight: 44,
+                    justifyContent: "center",
+                    paddingHorizontal: 12,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: t.line,
+                    backgroundColor: t.inset,
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                >
+                  <Label size={12} weight>
+                    {text}
+                  </Label>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      )}
       <Chips
         values={["EXPENSE", "INCOME", "TRANSFER"] as const}
         labels={{ EXPENSE: "Expense", INCOME: "Income", TRANSFER: "Transfer" }}

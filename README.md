@@ -72,4 +72,7 @@ Settings › Rules is where behaviour is decided by you instead of by the app. E
 - **Require a focus label:** ask what you are working on before a focus timer starts.
 - **Sections shown in Plan:** budgets, savings goals, loans, lending, employer claims and monthly bills can each be hidden. Hiding a section never deletes its records.
 
+- **Quick entries:** how many one-tap shortcuts New entry offers. They are your own repeated entries (same amount, account, category and note at least twice in 90 days) plus "Repeat last".
+- **Spending change alert / Renewal look-ahead / Show cost in work time:** what Insights points out. "What changed" lists categories that moved past your threshold against last month; Subscriptions shows the average monthly cost and unpaid renewals in your window; work time converts spending into hours using active salary divided by the hours your work schedule plans per month.
+
 Focus timers can carry a label. Work & focus analytics show the share of each workday spent in focus (focus that overlaps work sessions, net of pauses) and the week's focus time per label.
