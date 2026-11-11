@@ -59,6 +59,12 @@ export function SettingsHomeScreen() {
           value={s.settings.notifications ? "On" : "Paused"}
           onPress={() => nav.navigate("Notifications")}
         />
+        <MenuRow
+          title="Rules"
+          icon="options-outline"
+          value="Edit window, auto-posting, sections"
+          onPress={() => nav.navigate("Rules")}
+        />
       </Card>
       <Section title="Organize" />
       <Card>

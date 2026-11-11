@@ -5,6 +5,7 @@ import { writeEntry } from "./TransactionRepository";
 import { Lending } from "../features/planning/models";
 import { minor, validDate } from "../features/planning/calculations";
 import { dateKey } from "../domain/shift";
+import { readEditWindow } from "./SettingsRepository";
 const schema = z.object({
   title: z.string().trim().min(1).max(80),
   amount_minor: minor,
@@ -124,7 +125,10 @@ export const LendingRepository = {
         r.transaction_id,
       );
       if (!entry) throw Error("Entry unavailable");
-      assertTransactionEditable(entry.transaction_date);
+      assertTransactionEditable(
+        entry.transaction_date,
+        await readEditWindow(tx),
+      );
       await tx.runAsync(
         "UPDATE transactions SET voided_at=? WHERE id=?",
         Date.now(),
@@ -140,8 +144,9 @@ export const LendingRepository = {
         id,
         id,
       );
+      const window = await readEditWindow(tx);
       for (const entry of entries)
-        assertTransactionEditable(entry.transaction_date);
+        assertTransactionEditable(entry.transaction_date, window);
       await tx.runAsync(
         "UPDATE transactions SET voided_at=? WHERE id IN (SELECT transaction_id FROM lending WHERE id=? UNION ALL SELECT transaction_id FROM lending_repayments WHERE lending_id=?)",
         Date.now(),

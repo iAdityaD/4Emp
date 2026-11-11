@@ -23,7 +23,7 @@ Settings and records are compact summaries. Tap a value to open its focused edit
 - Safe-to-spend subtracts active goal reservations and unpaid obligations through the configured cycle end, then divides by remaining cycle days. Overdue obligations remain reserved. Transfers and expected future income do not inflate this value. Negative amounts show a shortfall.
 - Corporate reimbursement settlement is atomic and idempotent, credits the chosen account, and is excluded from personal income. Split models remain forward-compatible; peer splitting is still explicitly Coming Soon.
 
-Transactions stay in Activity with filtering, category, account and timestamp details. Edit/delete close **exactly 24 hours after the recorded transaction timestamp**, including backdated entries. The repository enforces this even if an editor was opened earlier. Deletion requires confirmation, soft-voids the record and reverses its account effects: expenses return funds, income removes funds, and transfers reverse both sides. Linked plan entries retain their own integrity restrictions. Deleted audit rows are retained in SQLite backups.
+Transactions stay in Activity with filtering, category, account and timestamp details. Edit/delete close **when your edit window ends (24 hours after the recorded transaction timestamp by default; see Your rules)**, including backdated entries. The repository enforces this even if an editor was opened earlier. Deletion requires confirmation, soft-voids the record and reverses its account effects: expenses return funds, income removes funds, and transfers reverse both sides. Linked plan entries retain their own integrity restrictions. Deleted audit rows are retained in SQLite backups.
 
 ## Work engine
 
@@ -62,3 +62,14 @@ This remains a development-key preview. A data-preserving in-place upgrade requi
 ## Work & Focus update (3.3)
 
 The Work tab opens daily analytics and work schedules directly. Analytics split sessions at local midnight, subtract focus pauses, and report work and focus separately without adding overlapping time. Schedules have editable time, weekdays and workday / leave-and-days-off scope; Settings retains global notification permissions and preferences. Migration 6 allows one active work session and one active focus session and preserves existing logs. The launcher uses a new mint geometric 4 icon; see assets/icon-prompt.md for provenance.
+
+## Your rules
+
+Settings › Rules is where behaviour is decided by you instead of by the app. Every rule is declared once in `src/features/rules/registry.ts`; the Rules screen and its editors are generated from that list.
+
+- **Lock old entries / Edit window:** how long after its recorded time a transaction can be edited or reversed (default 24 hours, 1 hour to 1 year), or never lock at all. The repository enforces the same rule the screens show.
+- **Auto-post catch-up:** how far back automatic posting may fill in missed dates (default 35 days, 0 = no limit). Older dates stay visible as due items to record yourself, so a plan with an old start date cannot debit an account many times at once.
+- **Require a focus label:** ask what you are working on before a focus timer starts.
+- **Sections shown in Plan:** budgets, savings goals, loans, lending, employer claims and monthly bills can each be hidden. Hiding a section never deletes its records.
+
+Focus timers can carry a label. Work & focus analytics show the share of each workday spent in focus (focus that overlaps work sessions, net of pauses) and the week's focus time per label.

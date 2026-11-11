@@ -83,6 +83,7 @@ export const useStore = create<State>((set, get) => ({
         Date.now(),
         initialSettings.financeReminderMinute,
         initialSettings.cycleDay,
+        initialSettings.autoPostCatchUpDays,
       );
       const planning = await PlanningRepository.load();
       const archivedAccounts = await AccountRepository.archived();

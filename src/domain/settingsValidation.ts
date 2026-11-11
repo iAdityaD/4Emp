@@ -2,6 +2,16 @@ import { z } from "zod";
 import { defaultSettings, Settings } from "./models";
 const minute = z.number().int().min(0).max(1439);
 export const settingsSchema = z.object({
+  editLock: z.boolean().default(true),
+  editWindowHours: z.number().int().min(1).max(8760).default(24),
+  autoPostCatchUpDays: z.number().int().min(0).max(3660).default(35),
+  focusLabelRequired: z.boolean().default(false),
+  moduleBudgets: z.boolean().default(true),
+  moduleGoals: z.boolean().default(true),
+  moduleLoans: z.boolean().default(true),
+  moduleLending: z.boolean().default(true),
+  moduleReimbursements: z.boolean().default(true),
+  moduleBills: z.boolean().default(true),
   focusNotifications: z.boolean().default(true),
   focusTarget: z.number().int().min(1).max(1440).default(25),
   baseline: z.number().int().min(1).max(1440),

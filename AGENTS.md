@@ -25,6 +25,7 @@ Logic tests live in `tests-ts/`, UI tests in `tests-ui/`. Logic tests need Node 
 | `src/services/` | Recurrence/reconciliation, notifications, backup, crypto. |
 | `src/state/store.ts` | Zustand store. `refresh()` reloads everything; `mutate()` wraps a write. |
 | `src/features/design/` | Theme tokens (`theme.ts`), charts, shared controls. |
+| `src/features/rules/` | The user-rules registry and the generated Rules screen. |
 | `src/ui/kit.tsx` | `useTheme`, `Page`, `Card`, `Button`, `Chips`, `Field`, `Label`, `act()`. |
 | `src/features/*`, `src/screens/` | Screens. |
 
@@ -35,11 +36,21 @@ Logic tests live in `tests-ts/`, UI tests in `tests-ui/`. Logic tests need Node 
 3. **Calendar dates are local `YYYY-MM-DD` keys.** Build and check them with `dateKey()` / `localDate()` from `src/domain/shift.ts`. Never use `toISOString().slice(0, 10)` for a calendar date: it shifts by a day in far-east and far-west timezones.
 4. **Timestamps are ISO-8601 UTC strings** (`toISOString()`).
 5. **Every multi-statement write runs in `db().withExclusiveTransactionAsync`.** Ledger rows are created only through `writeEntry()`.
-6. **Deleting a transaction is a soft void** (`voided_at`), and edits/deletes lock 24 hours after the recorded time. Enforce this in the repository, not only in the UI.
+6. **Deleting a transaction is a soft void** (`voided_at`), and edits/deletes lock when the user's edit window ends (`readEditWindow`). Enforce this in the repository, not only in the UI.
 7. **Occurrence identities are permanent.** Salary, recurring and auto-post subscription occurrences keep their row after a reversal so reopening the app never re-posts them.
 8. **`reconcilePlans()` runs on every refresh and must never throw for bad plan data.** A rule that cannot post stays visible as a due reminder. A throw here locks the user out of the app.
 9. **Reading settings must not throw** (`recoverSettings`); writing settings stays strict (`validateSettings`).
 10. **Schema changes are append-only migrations** in `src/db/schema.ts`. Add new tables to `backupTables`, and never edit a shipped migration.
+
+## Adding a user rule
+
+Behaviour a user might reasonably want to change is a **rule**, not a constant.
+
+1. Add the setting to `Settings` and `defaultSettings` (`src/domain/models.ts`) and to `settingsSchema` with a `.default()` (`src/domain/settingsValidation.ts`). The default must keep existing behaviour.
+2. Add one entry to `rules` in `src/features/rules/registry.ts`.
+3. Read the value where the behaviour is enforced. Enforce in the repository or service, and only mirror it in the UI.
+
+The Rules screen, the focused editor and validation pick the rule up automatically. `tests-ts/rules.test.ts` checks that every registered rule has a schema and a default of the right type.
 
 ## Adding a screen
 

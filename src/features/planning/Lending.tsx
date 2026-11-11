@@ -1,4 +1,4 @@
-import { transactionExpired } from "../../domain/transactionPolicy";
+import { editWindow, transactionExpired } from "../../domain/transactionPolicy";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Alert } from "react-native";
@@ -117,7 +117,11 @@ export function LendingDetailsScreen() {
           <Label muted>
             {s.accounts.find((a) => a.id === p.account_id)?.name ?? "Account"}
           </Label>
-          {!transactionExpired(p.payment_date + "T00:00:00") && (
+          {!transactionExpired(
+            p.payment_date + "T00:00:00",
+            Date.now(),
+            editWindow(s.settings),
+          ) && (
             <IconButton
               icon="arrow-undo-outline"
               label="Undo repayment"
@@ -139,7 +143,11 @@ export function LendingDetailsScreen() {
           )}
         </Card>
       ))}
-      {!transactionExpired(r.lent_date + "T00:00:00") && (
+      {!transactionExpired(
+        r.lent_date + "T00:00:00",
+        Date.now(),
+        editWindow(s.settings),
+      ) && (
         <Button
           title="Delete lending"
           secondary

@@ -45,7 +45,11 @@ import {
   validateValue,
   wizardKeys,
 } from "./model";
-import { transactionExpired } from "../../domain/transactionPolicy";
+import {
+  editWindow,
+  editWindowAdjective,
+  transactionExpired,
+} from "../../domain/transactionPolicy";
 interface Draft {
   entity: Entity;
   kind?: PlanKind;
@@ -188,11 +192,17 @@ export function FocusedEditScreen() {
   if (
     entity === "transaction" &&
     record &&
-    transactionExpired(String(record.transaction_date))
+    transactionExpired(
+      String(record.transaction_date),
+      Date.now(),
+      editWindow(useStore.getState().settings),
+    )
   )
     return (
       <Page title="Transaction locked">
-        <Label muted>The 24-hour edit window has ended.</Label>
+        <Label muted>
+          {`The ${editWindowAdjective(editWindow(useStore.getState().settings))} edit window has ended.`}
+        </Label>
       </Page>
     );
   if (!spec || !record)

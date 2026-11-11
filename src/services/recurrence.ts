@@ -15,10 +15,16 @@ export async function reconcilePlans(
   now = Date.now(),
   notificationMinute = 540,
   cycleDay = 1,
+  /** User rule: automatic posting never back-fills dates older than this. 0 = no limit. */
+  catchUpDays = 0,
 ) {
   const data = await PlanningRepository.load(),
     today = dateKey(now),
+    earliest = new Date(now),
     horizonDate = new Date(now);
+  earliest.setDate(earliest.getDate() - catchUpDays);
+  const postable = (date: string) =>
+    date <= today && (catchUpDays === 0 || date >= dateKey(earliest));
   horizonDate.setFullYear(horizonDate.getFullYear() + 1);
   const horizon = dateKey(horizonDate);
   await db().withExclusiveTransactionAsync(async (tx) => {
@@ -74,7 +80,7 @@ export async function reconcilePlans(
         );
         if (done) continue;
         const tid =
-          date <= today && r.auto_post
+          postable(date) && r.auto_post
             ? await post({
                 accountId: r.account_id,
                 type: "INCOME",
@@ -116,7 +122,7 @@ export async function reconcilePlans(
         );
         if (done) continue;
         const tid =
-          date <= today && r.auto_post
+          postable(date) && r.auto_post
             ? await post({
                 accountId: r.account_id,
                 destinationId: r.destination_account_id ?? undefined,
@@ -158,7 +164,7 @@ export async function reconcilePlans(
         );
         if (paid) continue;
         const tid =
-          s.auto_post && date <= today
+          s.auto_post && postable(date)
             ? await post(
                 {
                   accountId: s.account_id,

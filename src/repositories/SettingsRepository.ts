@@ -6,6 +6,7 @@ import {
 } from "../domain/settingsValidation";
 import { db } from "../db/connection";
 import { defaultSettings, Settings } from "../domain/models";
+import { editWindow } from "../domain/transactionPolicy";
 
 type Reader = Pick<SQLiteDatabase, "getAllAsync">;
 async function readSettings(reader: Reader): Promise<Settings> {
@@ -53,6 +54,11 @@ async function writeSettings(
       JSON.stringify(valid[key]),
     );
   }
+}
+
+/** The user's current edit window, read on the caller's own connection. */
+export async function readEditWindow(reader: Reader) {
+  return editWindow(await readSettings(reader));
 }
 
 export const SettingsRepository = {

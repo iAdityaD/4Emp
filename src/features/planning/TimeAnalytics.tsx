@@ -2,7 +2,12 @@ import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import Svg, { Rect, G, Text as SVGText } from "react-native-svg";
 import { dateKey, localDate, hours, clock } from "../../domain/shift";
-import { dailyTimeSeries, sessionDayMillis } from "../../domain/timeAnalytics";
+import {
+  dailyTimeSeries,
+  focusByLabel,
+  focusShare,
+  sessionDayMillis,
+} from "../../domain/timeAnalytics";
 import { isFocus } from "../../domain/workModes";
 import { useStore } from "../../state/store";
 import { Card, Label, Page, Row, Button, useNow, useTheme } from "../../ui/kit";
@@ -30,6 +35,8 @@ export function TimeAnalyticsScreen() {
     setStart(key);
     setSelected(key);
   };
+  const share = focusShare(s.shifts, s.breaks, day.day, now),
+    labels = focusByLabel(s.shifts, s.breaks, start, 7, now);
   const sessions = s.shifts.filter(
     (x) => sessionDayMillis(x, s.breaks, day.day, now) > 0,
   );
@@ -143,11 +150,34 @@ export function TimeAnalyticsScreen() {
           <Label color={t.cyan}>Focus</Label>
           <Label weight>{hours(day.focus)}</Label>
         </Row>
+        <Row>
+          <Label muted>Focus share of work</Label>
+          <Label weight>
+            {share.work ? `${Math.round(share.share * 100)}%` : "—"}
+          </Label>
+        </Row>
       </Card>
+      {labels.length > 0 && (
+        <Card>
+          <Label muted>Focus by label · this week</Label>
+          {labels.map((row) => (
+            <Row key={row.label}>
+              <Label>{row.label}</Label>
+              <Label weight>{hours(row.ms)}</Label>
+            </Row>
+          ))}
+        </Card>
+      )}
       {sessions.map((x) => (
         <Card key={x.id}>
           <MenuRow
-            title={isFocus(x.shift_type) ? "Focus" : "Work"}
+            title={
+              isFocus(x.shift_type)
+                ? x.notes?.trim()
+                  ? `Focus · ${x.notes.trim()}`
+                  : "Focus"
+                : "Work"
+            }
             icon={isFocus(x.shift_type) ? "timer-outline" : "briefcase-outline"}
             value={`${clock(x.first_swipe_in)} – ${x.last_swipe_out ? clock(x.last_swipe_out) : x.status === "NEEDS_REVIEW" ? "Review needed" : "Running"}`}
             trailing={

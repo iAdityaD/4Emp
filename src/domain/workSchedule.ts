@@ -15,6 +15,8 @@ export interface StartOptions {
   allowRestDay?: boolean;
   allowLateStart?: boolean;
   startedAt?: number;
+  /** What a focus timer is for; saved as the session note. */
+  label?: string;
 }
 
 export function shiftStartPlan(

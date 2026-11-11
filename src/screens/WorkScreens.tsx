@@ -55,6 +55,7 @@ export function HomeScreen() {
     ),
     [custom, setCustom] = useState(String(s.settings.focusTarget)),
     [startedAt, setStartedAt] = useState<string | null>(null),
+    [focusLabel, setFocusLabel] = useState(""),
     [showStart, setShowStart] = useState(false);
   const router = useRouter();
   const workActive = s.shifts.find(
@@ -131,8 +132,10 @@ export function HomeScreen() {
         ShiftRepository.start(type, Number(custom), s.settings, {
           ...options,
           startedAt: startedAt ? Date.parse(startedAt) : undefined,
+          label: focusLabel,
         }),
       () => {
+        setFocusLabel("");
         setStartedAt(null);
         setShowStart(false);
       },
@@ -289,10 +292,21 @@ export function HomeScreen() {
               </Label>
 
               {type === "CUSTOM" && (
-                <DurationControl
-                  value={Number(custom)}
-                  onChange={(v) => setCustom(String(v))}
-                />
+                <>
+                  <DurationControl
+                    value={Number(custom)}
+                    onChange={(v) => setCustom(String(v))}
+                  />
+                  <Field
+                    label={
+                      s.settings.focusLabelRequired
+                        ? "Focus label"
+                        : "Focus label · optional"
+                    }
+                    value={focusLabel}
+                    onChange={setFocusLabel}
+                  />
+                </>
               )}
             </>
           )}
