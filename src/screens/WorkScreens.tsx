@@ -184,6 +184,7 @@ export function HomeScreen() {
         </Label>
         <Row>
           <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Work and focus analytics"
             onPress={() => nav.navigate("WorkAnalytics")}
             style={{ padding: 12 }}
@@ -240,7 +241,7 @@ export function HomeScreen() {
       }
       {(workActive || focusActive) && (
         <Row>
-          <Label size={12} color={workActive ? t.accent : t.muted}>
+          <Label size={12} color={workActive ? t.accentInk : t.muted}>
             {workActive ? "Work running" : "Work not started"}
           </Label>
           <Label size={12} color={focusActive ? t.cyan : t.muted}>
@@ -588,9 +589,9 @@ export function CalendarScreen() {
                       now,
                     ).remaining === 0),
               )
-                ? t.accent
+                ? t.success
                 : t.orange;
-            else if (mark?.kind === "WORKED") color = t.accent;
+            else if (mark?.kind === "WORKED") color = t.success;
             return (
               <Pressable
                 key={i}

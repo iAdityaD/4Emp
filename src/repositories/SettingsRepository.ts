@@ -1,6 +1,9 @@
 import type { SQLiteDatabase } from "expo-sqlite";
 import type { WorkProfile } from "../features/planning/models";
-import { validateSettings } from "../domain/settingsValidation";
+import {
+  recoverSettings,
+  validateSettings,
+} from "../domain/settingsValidation";
 import { db } from "../db/connection";
 import { defaultSettings, Settings } from "../domain/models";
 
@@ -17,7 +20,7 @@ async function readSettings(reader: Reader): Promise<Settings> {
       } catch {
         /* Keep the default for a corrupt legacy preference. */
       }
-  return validateSettings(result);
+  return recoverSettings(result);
 }
 
 async function writeSettings(

@@ -141,7 +141,7 @@ export function FieldControl({
               <Ionicons
                 name={value === option ? "checkmark-circle" : "ellipse-outline"}
                 size={24}
-                color={value === option ? t.accent : t.muted}
+                color={value === option ? t.accentInk : t.muted}
               />
             </Row>
           </Pressable>
@@ -205,7 +205,7 @@ export function FieldControl({
               gap: 12,
             }}
           >
-            <Ionicons name="calendar-outline" size={32} color={t.accent} />
+            <Ionicons name="calendar-outline" size={32} color={t.accentInk} />
             <Label size={26} weight>
               {value
                 ? d.toLocaleDateString([], {
@@ -230,7 +230,7 @@ export function FieldControl({
               gap: 12,
             }}
           >
-            <Ionicons name="time-outline" size={32} color={t.accent} />
+            <Ionicons name="time-outline" size={32} color={t.accentInk} />
             <Label size={38} weight>
               {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </Label>

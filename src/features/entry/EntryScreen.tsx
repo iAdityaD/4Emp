@@ -57,7 +57,7 @@ export function EntryScreen() {
           ? v.includes(".")
             ? v
             : (v || "0") + "."
-          : v.length > 13 || (v.includes(".") && v.split(".")[1]!.length >= 2)
+          : (v.includes(".") ? v.split(".")[1]!.length >= 2 : v.length >= 11)
             ? v
             : v === "0"
               ? key
@@ -71,7 +71,8 @@ export function EntryScreen() {
           type,
           accountId: account,
           destinationId: type === "TRANSFER" ? destination : undefined,
-          amount: parseAmount(amount),
+          // "12." is a complete amount while typing; only the digits matter.
+          amount: parseAmount(amount.replace(/\.$/, "")),
           categoryId: type === "TRANSFER" ? undefined : category || undefined,
           date: options.transaction_date,
           note: String(options.note ?? ""),

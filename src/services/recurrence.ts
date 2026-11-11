@@ -1,6 +1,6 @@
 import { db, uid } from "../db/connection";
 import { PlanningRepository } from "../repositories/PlanningRepository";
-import { writeEntry } from "../repositories/TransactionRepository";
+import { Entry, writeEntry } from "../repositories/TransactionRepository";
 import { dateKey, localDate } from "../domain/shift";
 import {
   occurrences,
@@ -50,6 +50,21 @@ export async function reconcilePlans(
         at.toISOString(),
       );
     }
+    /**
+     * A plan that can no longer post (for example, its account or category was
+     * archived after the rule was saved) must never block opening the app.
+     * The occurrence stays visible as a due item until the plan is repaired.
+     */
+    async function post(
+      entry: Entry,
+      kind: Transaction["ledger_kind"] = "PERSONAL",
+    ) {
+      try {
+        return await writeEntry(tx, entry, uid(), kind);
+      } catch {
+        return null;
+      }
+    }
     for (const r of data.salary.filter((r) => r.is_active))
       for (const date of salaryDates(r.start_date, r.payday, horizon)) {
         const done = await tx.getFirstAsync(
@@ -57,22 +72,26 @@ export async function reconcilePlans(
           r.id,
           date,
         );
-        if (date <= today && r.auto_post && !done) {
-          const tid = await writeEntry(tx, {
-            accountId: r.account_id,
-            type: "INCOME",
-            amount: r.amount_minor / 100,
-            categoryId: r.category_id ?? undefined,
-            date: localDate(date).toISOString(),
-            note: r.title,
-          });
+        if (done) continue;
+        const tid =
+          date <= today && r.auto_post
+            ? await post({
+                accountId: r.account_id,
+                type: "INCOME",
+                amount: r.amount_minor / 100,
+                categoryId: r.category_id ?? undefined,
+                date: localDate(date).toISOString(),
+                note: r.title,
+              })
+            : null;
+        if (tid)
           await tx.runAsync(
             "INSERT INTO salary_occurrences VALUES(?,?,?)",
             r.id,
             date,
             tid,
           );
-        } else if (!done)
+        else
           await remind(
             "SALARY",
             r.id,
@@ -95,24 +114,27 @@ export async function reconcilePlans(
           r.id,
           date,
         );
-        if (date <= today && r.auto_post && !done) {
-          const tid = await writeEntry(tx, {
-            accountId: r.account_id,
-            destinationId: r.destination_account_id ?? undefined,
-            type: r.type,
-            amount: r.amount_minor / 100,
-            categoryId: r.category_id ?? undefined,
-            date: localDate(date).toISOString(),
-            note: r.title,
-          });
+        if (done) continue;
+        const tid =
+          date <= today && r.auto_post
+            ? await post({
+                accountId: r.account_id,
+                destinationId: r.destination_account_id ?? undefined,
+                type: r.type,
+                amount: r.amount_minor / 100,
+                categoryId: r.category_id ?? undefined,
+                date: localDate(date).toISOString(),
+                note: r.title,
+              })
+            : null;
+        if (tid)
           await tx.runAsync(
             "INSERT INTO recurring_occurrences VALUES(?,?,?)",
             r.id,
             date,
             tid,
           );
-        } else if (!done)
-          await remind("RECURRING", r.id, date, r.title, r.amount_minor);
+        else await remind("RECURRING", r.id, date, r.title, r.amount_minor);
       }
     for (const l of data.loans.filter((l) => l.is_active))
       for (const e of data.emis.filter(
@@ -135,28 +157,29 @@ export async function reconcilePlans(
           date,
         );
         if (paid) continue;
-        if (s.auto_post && date <= today) {
-          const tid = await writeEntry(
-            tx,
-            {
-              accountId: s.account_id,
-              destinationId: s.destination_account_id ?? undefined,
-              type: s.payment_type ?? "EXPENSE",
-              amount: s.amount_minor / 100,
-              categoryId: s.category_id ?? undefined,
-              date: localDate(date).toISOString(),
-              note: `${s.title} • ${date}`,
-            },
-            uid(),
-            "COMMITMENT",
-          );
+        const tid =
+          s.auto_post && date <= today
+            ? await post(
+                {
+                  accountId: s.account_id,
+                  destinationId: s.destination_account_id ?? undefined,
+                  type: s.payment_type ?? "EXPENSE",
+                  amount: s.amount_minor / 100,
+                  categoryId: s.category_id ?? undefined,
+                  date: localDate(date).toISOString(),
+                  note: `${s.title} • ${date}`,
+                },
+                "COMMITMENT",
+              )
+            : null;
+        if (tid)
           await tx.runAsync(
             "INSERT INTO subscription_payments VALUES(?,?,?)",
             s.id,
             date,
             tid,
           );
-        } else
+        else
           await remind(
             "SUBSCRIPTION",
             s.id,

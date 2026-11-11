@@ -115,7 +115,7 @@ export function AppearanceScreen() {
         }}
       >
         <Row>
-          <Ionicons name="sparkles-outline" size={24} color={t.accent} />
+          <Ionicons name="sparkles-outline" size={24} color={t.accentInk} />
           <Label weight>Preview</Label>
           <View
             style={{
@@ -266,7 +266,7 @@ export function SecurityScreen() {
               s.settings.lock ? "shield-checkmark-outline" : "shield-outline"
             }
             size={58}
-            color={t.accent}
+            color={t.accentInk}
           />
         </View>
         <Label size={24} weight>

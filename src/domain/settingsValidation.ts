@@ -50,3 +50,21 @@ export const settingsSchema = z.object({
 export function validateSettings(partial: unknown): Settings {
   return settingsSchema.parse({ ...defaultSettings, ...(partial as object) });
 }
+/**
+ * Reading must survive a damaged or outdated stored preference. Each invalid
+ * value falls back to its default instead of locking the user out of the app.
+ * Writes and restores keep using the strict validateSettings.
+ */
+export function recoverSettings(partial: unknown): Settings {
+  const merged: Record<string, unknown> = {
+    ...defaultSettings,
+    ...(partial as object),
+  };
+  if (settingsSchema.safeParse(merged).success) return validateSettings(merged);
+  const shape = settingsSchema.shape as Record<string, z.ZodType>;
+  const defaults = defaultSettings as unknown as Record<string, unknown>;
+  for (const key of Object.keys(shape))
+    if (!shape[key]!.safeParse(merged[key]).success)
+      merged[key] = defaults[key];
+  return validateSettings(merged);
+}

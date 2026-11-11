@@ -32,6 +32,13 @@ export function Progress({ value, color }: { value: number; color?: string }) {
   const t = useTheme();
   return (
     <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityValue={{
+        min: 0,
+        max: 100,
+        now: Math.round(Math.min(100, Math.max(0, value * 100))),
+      }}
       style={{
         height: 7,
         borderRadius: 8,
@@ -78,13 +85,13 @@ export function Tile({
             style={{
               width: 38,
               height: 38,
-              borderRadius: 13,
-              backgroundColor: (color ?? t.accent) + "18",
+              borderRadius: 10,
+              backgroundColor: (color ?? t.accent) + "1F",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Ionicons name={icon} size={21} color={color ?? t.accent} />
+            <Ionicons name={icon} size={21} color={color ?? t.accentInk} />
           </View>
           <View style={{ flex: 1 }}>
             <Label weight>{title}</Label>
@@ -128,7 +135,7 @@ export function Toggle({
         accessibilityLabel={label}
         value={value}
         onValueChange={onChange}
-        trackColor={{ true: t.accent }}
+        trackColor={{ true: t.accent, false: t.line }}
       />
     </Row>
   );
@@ -210,6 +217,7 @@ export function WeekdayChoice({
         <Button
           key={day}
           title={day}
+          selected={!!(value & (1 << i))}
           secondary={!(value & (1 << i))}
           onPress={() => onChange(value ^ (1 << i))}
         />

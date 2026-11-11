@@ -51,10 +51,27 @@ export function Ring({
         <Circle
           cx={132}
           cy={132}
+          r={126}
+          fill="none"
+          stroke={t.glow}
+          strokeWidth={1.5}
+          strokeDasharray="2 9"
+        />
+        <Circle
+          cx={132}
+          cy={132}
           r={r}
           fill="none"
           stroke={t.line}
           strokeWidth={10}
+        />
+        <Circle
+          cx={132}
+          cy={132}
+          r={94}
+          fill="none"
+          stroke={t.line}
+          strokeWidth={1}
         />
         <AnimatedCircle
           animatedProps={animatedProps}
@@ -73,7 +90,7 @@ export function Ring({
       <Label size={12} muted>
         {label}
       </Label>
-      <Label size={33} weight>
+      <Label size={31} weight mono>
         {value}
       </Label>
       <Label size={12} color={t.cyan}>

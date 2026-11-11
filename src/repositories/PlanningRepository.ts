@@ -158,6 +158,8 @@ export const PlanningRepository = {
     >;
     if (kind === "subscriptions" && data.payment_type === "EXPENSE")
       data.destination_account_id = null;
+    if (kind === "recurring" && data.type !== "TRANSFER")
+      data.destination_account_id = null;
     const key = id ?? uid();
     const table = planTables[kind];
     await db().withExclusiveTransactionAsync(async (tx) => {

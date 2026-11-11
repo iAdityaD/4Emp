@@ -124,7 +124,7 @@ export interface Settings {
 export const defaultSettings: Settings = {
   focusNotifications: true,
   focusTarget: 25,
-  accent: "#00A88A",
+  accent: "#00D1FF",
   financeReminderMinute: 540,
   hideBalances: false,
   weekTargets: [510, 510, 510, 510, 510, 0, 0],

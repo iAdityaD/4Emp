@@ -62,7 +62,7 @@ export function TimeAnalyticsScreen() {
         <Row>
           <View>
             <Label muted>Work this week</Label>
-            <Label size={23} weight color={t.accent}>
+            <Label size={23} weight color={t.accentInk}>
               {hours(rows.reduce((n, r) => n + r.work, 0))}
             </Label>
           </View>
@@ -136,7 +136,7 @@ export function TimeAnalyticsScreen() {
       </Label>
       <Card>
         <Row>
-          <Label color={t.accent}>Work</Label>
+          <Label color={t.accentInk}>Work</Label>
           <Label weight>{hours(day.work)}</Label>
         </Row>
         <Row>

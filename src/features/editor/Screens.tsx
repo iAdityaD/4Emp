@@ -686,7 +686,7 @@ export function SetupScreen() {
       ) : spec ? (
         <>
           <View style={{ alignItems: "center", paddingVertical: 10 }}>
-            <Ionicons name={spec.icon} size={38} color={t.accent} />
+            <Ionicons name={spec.icon} size={38} color={t.accentInk} />
           </View>
           <FieldControl
             key={p.step}

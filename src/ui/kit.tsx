@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter, useSegments } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,34 +22,61 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "../state/store";
+import { palette } from "../features/design/theme";
+/** Fixed-width digits keep timers and readouts from shifting as they tick. */
+export const monoFont = Platform.select({
+  ios: "Menlo",
+  android: "monospace",
+  default: "monospace",
+});
 export function useTheme() {
   const accent = useStore((s) => s.settings.accent);
   const preference = useStore((s) => s.settings.theme),
     system = useColorScheme();
   const dark =
     preference === "dark" || (preference === "system" && system !== "light");
-  const rgb = [1, 3, 5]
-    .map((i) => parseInt(accent.slice(i, i + 2), 16) / 255)
-    .map((v) =>
-      v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4),
-    );
-  const luminance = rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722;
-  const onAccent = luminance > 0.179 ? "#071A19" : "#FFFFFF";
-  return {
-    dark,
-    bg: dark ? "#0F1115" : "#F8F6F1",
-    card: dark ? "#171D23" : "#FFFFFF",
-    text: dark ? "#F1F4F0" : "#18221E",
-    muted: dark ? "#94A19C" : "#63756A",
-    line: dark ? "#2B3339" : "#E9E5DD",
-    accent,
-    onAccent,
-    danger: "#F7505E",
-    success: dark ? "#34D4AA" : "#009F78",
-    cyan: dark ? "#75DCE9" : "#146977",
-    orange: "#EDAA66",
-    purple: "#AF8DE2",
-  };
+  return useMemo(() => palette(dark, accent), [dark, accent]);
+}
+/** Decorative HUD corner brackets for panels. Hidden from assistive tech. */
+export function Brackets({
+  color,
+  size = 16,
+}: {
+  color: string;
+  size?: number;
+}) {
+  const edge = { position: "absolute" as const, width: size, height: size };
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+    >
+      <View
+        style={{
+          ...edge,
+          top: -1,
+          left: -1,
+          borderTopWidth: 2,
+          borderLeftWidth: 2,
+          borderTopLeftRadius: 16,
+          borderColor: color,
+        }}
+      />
+      <View
+        style={{
+          ...edge,
+          bottom: -1,
+          right: -1,
+          borderBottomWidth: 2,
+          borderRightWidth: 2,
+          borderBottomRightRadius: 16,
+          borderColor: color,
+        }}
+      />
+    </View>
+  );
 }
 export function Label({
   children,
@@ -57,12 +84,15 @@ export function Label({
   muted = false,
   color,
   weight = false,
+  mono = false,
 }: {
   children: React.ReactNode;
   size?: number;
   muted?: boolean;
   color?: string;
   weight?: boolean;
+  /** Fixed-width digits for timers and other live readouts. */
+  mono?: boolean;
 }) {
   const t = useTheme();
   return (
@@ -72,6 +102,8 @@ export function Label({
         color: color ?? (muted ? t.muted : t.text),
         fontWeight: weight ? "700" : "400",
         lineHeight: size * 1.4,
+        ...(mono ? { fontFamily: monoFont } : null),
+        ...(weight && size >= 20 ? { letterSpacing: 0.3 } : null),
       }}
     >
       {children}
@@ -104,24 +136,51 @@ export function Page({
             accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => router.back()}
-            style={{
-              width: 40,
+            hitSlop={6}
+            style={({ pressed }) => ({
+              width: 44,
               height: 44,
               alignItems: "center",
               justifyContent: "center",
-              borderRadius: 13,
-              backgroundColor: t.line,
-            }}
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: t.line,
+              backgroundColor: t.inset,
+              opacity: pressed ? 0.6 : 1,
+            })}
           >
-            <Ionicons name="arrow-back" size={21} color={t.text} />
+            <Ionicons name="arrow-back" size={21} color={t.accentInk} />
           </Pressable>
         )}
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }} accessibilityRole="header">
           <Label size={28} weight>
             {title}
           </Label>
         </View>
         {trailing}
+      </View>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+      >
+        <View
+          style={{
+            width: 28,
+            height: 3,
+            borderRadius: 2,
+            backgroundColor: t.accent,
+          }}
+        />
+        <View
+          style={{
+            width: 6,
+            height: 3,
+            borderRadius: 2,
+            backgroundColor: t.glow,
+          }}
+        />
+        <View style={{ flex: 1, height: 1, backgroundColor: t.line }} />
       </View>
       {subtitle && <Label muted>{subtitle}</Label>}
       {children}
@@ -158,12 +217,13 @@ export function Card({ children }: { children: React.ReactNode }) {
       style={{
         backgroundColor: t.card,
         padding: 18,
-        borderRadius: 22,
+        borderRadius: 16,
         gap: 12,
         borderWidth: 1,
         borderColor: t.line,
       }}
     >
+      <Brackets color={t.glow} />
       {children}
     </Animated.View>
   );
@@ -189,26 +249,36 @@ export function Button({
   secondary = false,
   disabled = false,
   icon,
+  selected,
 }: {
   title: string;
   onPress: () => void;
   secondary?: boolean;
   disabled?: boolean;
   icon?: React.ComponentProps<typeof Ionicons>["name"];
+  /** Set for buttons that act as on/off choices so the state is announced. */
+  selected?: boolean;
 }) {
   const t = useTheme(),
     busy = useStore((s) => s.busy);
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{
+        disabled: disabled || busy,
+        busy,
+        ...(selected === undefined ? null : { selected }),
+      }}
       disabled={disabled || busy}
       onPress={onPress}
       style={({ pressed }) => ({
         minHeight: 48,
         paddingVertical: 13,
         paddingHorizontal: 18,
-        borderRadius: 15,
-        backgroundColor: secondary ? t.line : t.accent,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: secondary ? t.line : t.accent,
+        backgroundColor: secondary ? t.inset : t.accent,
         opacity: pressed || disabled || busy ? 0.6 : 1,
         flexDirection: "row",
         alignItems: "center",
@@ -217,12 +287,17 @@ export function Button({
       })}
     >
       {icon && (
-        <Ionicons name={icon} size={18} color={secondary ? t.text : t.bg} />
+        <Ionicons
+          name={icon}
+          size={18}
+          color={secondary ? t.text : t.onAccent}
+        />
       )}
       <Text
         style={{
           fontSize: 14,
           fontWeight: "700",
+          letterSpacing: 0.4,
           color: secondary ? t.text : t.onAccent,
         }}
       >
@@ -270,7 +345,7 @@ export function Chips<T extends string>({
       style={{
         flexGrow: 0,
         flexShrink: 0,
-        height: Math.max(44, Math.ceil(12 * fontScale * 1.4 + 24)),
+        height: Math.max(44, Math.ceil(12 * fontScale * 1.4 + 26)),
       }}
       contentContainerStyle={{ alignItems: "center" }}
     >
@@ -283,8 +358,10 @@ export function Chips<T extends string>({
             accessibilityState={{ selected: v === value }}
             style={{
               padding: 12,
-              borderRadius: 14,
-              backgroundColor: v === value ? t.accent : t.line,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: v === value ? t.accent : t.line,
+              backgroundColor: v === value ? t.accent : t.inset,
             }}
           >
             <Text
@@ -350,22 +427,25 @@ export function Field({
           autoCapitalize="none"
           style={{
             flex: 1,
-            backgroundColor: t.bg,
+            backgroundColor: t.inset,
             borderColor: t.line,
             borderWidth: 1,
             padding: 14,
-            borderRadius: 13,
+            borderRadius: 12,
             color: t.text,
             fontSize: 16,
           }}
+          placeholderTextColor={t.muted}
+          selectionColor={t.accent}
         />
         {Platform.OS !== "web" && hasDate && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Pick date for ${label}`}
             onPress={() => setPicker("date")}
+            hitSlop={10}
           >
-            <Ionicons name="calendar-outline" color={t.accent} size={24} />
+            <Ionicons name="calendar-outline" color={t.accentInk} size={24} />
           </Pressable>
         )}
         {Platform.OS !== "web" && hasTime && (
@@ -373,8 +453,9 @@ export function Field({
             accessibilityRole="button"
             accessibilityLabel={`Pick time for ${label}`}
             onPress={() => setPicker("time")}
+            hitSlop={10}
           >
-            <Ionicons name="time-outline" color={t.accent} size={24} />
+            <Ionicons name="time-outline" color={t.accentInk} size={24} />
           </Pressable>
         )}
       </View>
@@ -411,6 +492,9 @@ export function Loading() {
   const t = useTheme();
   return (
     <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading your data"
       style={{
         flex: 1,
         backgroundColor: t.bg,
@@ -418,7 +502,20 @@ export function Loading() {
         justifyContent: "center",
       }}
     >
-      <ActivityIndicator color={t.accent} />
+      <View
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          borderWidth: 1,
+          borderColor: t.glow,
+          backgroundColor: t.card,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator color={t.accentInk} />
+      </View>
     </View>
   );
 }
